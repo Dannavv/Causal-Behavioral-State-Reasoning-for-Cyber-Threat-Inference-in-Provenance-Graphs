@@ -1,0 +1,142 @@
+% ============================================================================
+% ZeroCausal M.Tech Thesis — Master Document
+% ============================================================================
+\documentclass[12pt, a4paper, oneside]{report}
+
+% ── Page geometry ──────────────────────────────────────────────────────────
+\usepackage[top=1in, bottom=1in, left=1.5in, right=1in]{geometry}
+
+% ── Encoding & fonts ──────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}          % Times New Roman-like font
+
+% ── Spacing ───────────────────────────────────────────────────────────────
+\usepackage{setspace}
+\onehalfspacing
+
+% Tighten float gaps (space between float and surrounding text)
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+
+% Tighten paragraph spacing
+\setlength{\parskip}{4pt plus 1pt}
+
+% ── Mathematics ───────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsfonts}
+
+% ── Graphics & figures ────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{caption}    % for \captionof outside float environments
+\graphicspath{{figures/}{../plots/}{../results/final/}}
+\usepackage{subcaption}
+\usepackage{float}
+
+% ── Tables ────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{array}
+
+% ── Algorithms & code ─────────────────────────────────────────────────────
+\usepackage[ruled, vlined, linesnumbered]{algorithm2e}
+\usepackage{listings}
+\lstset{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  breakatwhitespace=true,
+  breakindent=2em,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  frame=single,
+  backgroundcolor=\color{gray!5},
+  keywordstyle=\color{blue!70!black},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  language=Python,
+  captionpos=b
+}
+
+% ── Colors ────────────────────────────────────────────────────────────────
+\usepackage{xcolor}
+\definecolor{linkblue}{RGB}{0, 51, 153}
+
+% ── Headers & footers ────────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\leftmark}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\usepackage{cite}
+
+% ── Hyperlinks ────────────────────────────────────────────────────────────
+\usepackage[
+  colorlinks=true,
+  linkcolor=linkblue,
+  citecolor=linkblue,
+  urlcolor=linkblue,
+  bookmarks=true,
+  bookmarksopen=true
+]{hyperref}
+
+% ── Bibliography ──────────────────────────────────────────────────────────
+% (Moved before hyperref)
+
+% ── Miscellaneous ─────────────────────────────────────────────────────────
+\usepackage{url}
+\usepackage{enumitem}
+\setlist{itemsep=2pt, topsep=4pt, parsep=0pt, partopsep=0pt}
+\usepackage{tcolorbox}
+\usepackage[bottom]{footmisc}
+\usepackage{textcomp}
+
+% ── Chapter and section heading style ────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptertitlename\ \thechapter}{14pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-20pt}{16pt}
+
+\titlespacing*{\section}{0pt}{10pt plus 2pt}{6pt plus 1pt}
+\titlespacing*{\subsection}{0pt}{8pt plus 2pt}{4pt plus 1pt}
+\titlespacing*{\subsubsection}{0pt}{6pt plus 1pt}{3pt plus 1pt}
+
+% ============================================================================
+% DOCUMENT BEGINS
+% ============================================================================
+\begin{document}
+
+% ── Front Matter ──────────────────────────────────────────────────────────
+\pagenumbering{roman}
+
+\input{chapters/titlepage}
+\input{chapters/declaration}
+\input{chapters/certificate}
+\input{chapters/acknowledgments}
+\input{chapters/abstract}
+
+% ── Table of Contents ─────────────────────────────────────────────────────
+\tableofcontents
+
+% ── Main Matter ───────────────────────────────────────────────────────────
+\cleardoublepage
+\pagenumbering{arabic}
+
+\input{chapters/ch1_introduction}
+\input{chapters/ch2_literature}
+\input{chapters/ch3_threat_model}
+\input{chapters/ch4_design}
+\input{chapters/ch5_implementation}
+\input{chapters/ch6_evaluation}
+\input{chapters/ch7_conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

@@ -1,0 +1,2290 @@
+arXiv:2502.08963v1 [cs.LG] 13 Feb 2025
+
+Modeling Time-evolving Causality over Data Streams
+Naoki Chihara
+
+Yasuko Matsubara
+
+SANKEN, Osaka University
+Osaka, Japan
+naoki88@sanken.osaka-u.ac.jp
+
+SANKEN, Osaka University
+Osaka, Japan
+yasuko@sanken.osaka-u.ac.jp
+
+Ren Fujiwara
+
+Yasushi Sakurai
+
+SANKEN, Osaka University
+Osaka, Japan
+r-fujiwr88@sanken.osaka-u.ac.jp
+
+SANKEN, Osaka University
+Osaka, Japan
+yasushi@sanken.osaka-u.ac.jp
+
+Abstract
+
+1
+
+Given an extensive, semi-infinite collection of multivariate coevolving data sequences (e.g., sensor/web activity streams) whose
+observations influence each other, how can we discover the timechanging cause-and-effect relationships in co-evolving data streams?
+How efficiently can we reveal dynamical patterns that allow us to
+forecast future values? In this paper, we present a novel streaming method, ModePlait, which is designed for modeling such
+causal relationships (i.e., time-evolving causality) in multivariate
+co-evolving data streams and forecasting their future values. The
+solution relies on characteristics of the causal relationships that
+evolve over time in accordance with the dynamic changes of exogenous variables. ModePlait has the following properties: (a)
+Effective: it discovers the time-evolving causality in multivariate
+co-evolving data streams by detecting the transitions of distinct
+dynamical patterns adaptively. (b) Accurate: it enables both the
+discovery of time-evolving causality and the forecasting of future
+values in a streaming fashion. (c) Scalable: our algorithm does not
+depend on data stream length and thus is applicable to very large
+sequences. Extensive experiments on both synthetic and real-world
+datasets demonstrate that our proposed model outperforms state-ofthe-art methods in terms of discovering the time-evolving causality
+as well as forecasting.
+
+In recent years, a substantial quantity of multivariate time series
+data has been collected from various events and applications related to the Internet of Things (IoT) [13, 35], web activities [29, 40],
+the spread of infectious diseases [30], and patterns of user behavior [38]. In real-world scenarios, in particular, these data are generated quickly and continuously, making it increasingly important to
+process them in a streaming fashion.
+There are various relationships between observations in time
+series (e.g., correlation, independency) and they are critical features
+for a wide range of time series analyses, including clustering [24, 42],
+forecasting [41], imputation [56], and others [55]. Among them,
+causality [6, 53] offers particularly valuable insight, with many studies dedicated to its investigation [19, 26] and improving downstream
+tasks by employing it as an inductive bias, guiding the learning
+process towards more generalizable representations [9, 12]. However, most existing methods assume that causal relationships do
+not evolve over time in multivariate time series [48]. It is crucial to
+discover such causal relationships if we are to detect new causative
+factors promptly and accurately forecast in a streaming fashion.
+Their pivotal role becomes increasingly apparent upon recognizing that real-world data streams contain these relationships. For
+example, with the spread of infectious diseases, when a new virus
+strain emerges in a country, certain activities, such as cross-border
+travel, can lead to an increase in the number of infections in other
+countries, and the causative countries change over time. Here, we
+refer to such time-changing causal relationships as “time-evolving
+causality.” So, how can we discover the time-evolving causality in
+data streams and model semi-infinite multivariate data sequences?
+Briefly, we design our model based on the structural equation
+model (SEM) [44], which is often utilized for learning causal structures. This model consists of two types of variables: endogenous
+variables and exogenous variables. The former are determined by
+the model itself, while the latter exist outside the model. In addition,
+exogenous variables are independent of each other and follow a
+non-Gaussian distribution. In our work, we consider that the causal
+relationships in data streams evolve over time in accordance with
+the dynamic changes of exogenous variables.
+There are two difficulties involved in designing a model for discovering time-evolving causality. (i) Latent temporal dynamics in
+univariate time series: As pointed out above, exogenous variables in
+the structural equation model are independent of each other, so it is
+unsuitable to consider them as multivariate time series. Therefore,
+
+CCS Concepts
+• Information systems → Data stream mining.
+
+Keywords
+Time series, Stream processing, Dynamical system
+ACM Reference Format:
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai. 2025.
+Modeling Time-evolving Causality over Data Streams. In Proceedings of the
+31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.1
+(KDD ’25), August 3–7, 2025, Toronto, ON, Canada. ACM, New York, NY, USA,
+12 pages. https://doi.org/10.1145/3690624.3709283
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+KDD ’25, Toronto, ON, Canada
+© 2025 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 979-8-4007-1245-6/25/08
+https://doi.org/10.1145/3690624.3709283
+
+Introduction
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+CN
+ZA
+
+IT
+
+JP
+
+In short, the problem we deal with is as follows:
+
+CN
+
+US
+
+Given: a semi-infinite multivariate data stream 𝑿 , which consists of
+𝑑-dimensional vectors 𝒙 (𝑡), i.e., 𝑿 = {𝒙 (1), ..., 𝒙 (𝑡𝑐 ), ...}, where 𝑡𝑐 is
+the current time,
+
+ZA
+
+IT
+
+JP
+
+• Find distinct dynamical patterns (i.e., regimes),
+• Discover causal relationships that changes in accordance with
+the transitions of regimes (i.e., time-evolving causality),
+• Forecast an 𝑙𝑠 -steps-ahead future value, i.e., 𝒗 (𝑡𝑐 + 𝑙𝑠 ),
+
+US
+
+(a-i) January 8, 2021
+(a-ii) May 19, 2022
+(a) Causal relationships at different time points
+ZA
+
+Im
+
+US
+
+Im
+
+CN
+
+Im
+
+Re
+
+Re
+
+continuously and quickly, in a streaming fashion.
+Re
+
+0.5
+0.5
+
+Value
+
+Value
+
+(b-i) Dec. 6, 2020 (b-ii) Jan. 10, 2022 (b-iii) May 19, 2022
+(b) Eigenvalues of latent temporal dynamics
+
+Sep-19
+Time
+
+5
+2
+May-17
+
+Jun-06
+Time
+
+(c-ii) June 5, 2022
+(c-i) September 27, 2021
+(c) Snapshots of 10 days-ahead future value forecasting
+Figure 1: Modeling power of ModePlait over an epidemiological data stream (i.e., #1 covid19): This original stream
+consists of daily COVID-19 infection numbers in five major
+countries. Our proposed method can (a) discover the causal
+relationships, which change over time, (b) extract the eigenvalues of the latent dynamics providing insight into them in
+terms of decay rate and temporal frequency, and (c) forecast
+future value in a stream fashion.
+we need to capture latent temporal dynamics in univariate time
+series to discover the time-evolving causality. However, it is challenging to design an appropriate system for univariate time series
+because the latent temporal dynamics in the system are generally
+multi-dimensional, and so a single dimension is insufficient for modeling the system. We solve this issue by expressing univariate time
+series as the superposition of computed basis vectors (i.e., modes)
+associated with decay rate and temporal frequency. (ii) Distinct
+dynamical patterns: Data streams typically contain various types
+of distinct dynamical patterns, and they are factors that change
+causal relationships over time. It is essential to understand their
+changes if we are to model an entire data stream effectively. For
+example, in the context of web search activities, we can identify
+various types of pattern changes caused by a multitude of reasons,
+such as a new item release. In addition, the event influences sales of
+other items, so the causal relationships could also change. We refer
+to these distinct dynamical patterns in data streams as “regimes.”
+In this paper, we present ModePlait1 , which simultaneously
+and continuously discovers time-evolving causality in a multivariate co-evolving data stream and forecasts future values. In addition,
+thanks to desirable features of modes, ModePlait extracts the temporal behavior of the latent dynamics in each exogenous variable
+in terms of decay rate and temporal frequency by analyzing the
+corresponding eigenvalues.
+1 Our
+
+source codes and datasets are available at [4]
+
+1.1
+
+Preview of Our Results
+
+Figure 1 shows the results obtained with ModePlait for modeling
+an epidemiological data stream (i.e., #1 covid19). This dataset consists of the number of COVID-19 infected patients in five countries
+(i.e., Japan, the United States, China, Italy, and the Republic of South
+Africa). Our method captures the following properties:
+Time-evolving causality. Figure 1 (a) shows the causal relationships between observations, which change over time. The arrows
+indicate causality: the base of each arrow represents the “cause,”
+while the head represents the “effect.” ModePlait successfully discovers the time-changing causal relationships between countries
+from an epidemiological data stream. For example, Figure 1 (a-i)
+shows that the Republic of South Africa had a causal influence on
+other countries. This finding corresponds to the fact that health
+officials announced the discovery of a new lineage of the coronavirus, namely 501.V2, in South Africa on December 18, 2020 [18],
+and indicates that ModePlait adaptively discovered the influence
+of the new coronavirus on other countries. Additionally, Figure 1
+(a-ii) shows that China had a causal influence on other countries in
+contrast to Figure 1 (a-i). This insight aligns with the period of one
+of the longest and toughest lockdowns in Shanghai, which lasted
+from early April 2022 to June 1, 2022 [8]. It implies that ModePlait
+detected the influence of the spread of coronavirus infection in
+Shanghai, which led to a strict and long-term lockdown. In summary, the above discussions make it clear that ModePlait can
+capture the transitions of distinct dynamical patterns in an epidemiological data stream and adaptively discover causal relationships at
+any given moment.
+Latent temporal dynamics. Figure 1 (b) shows the eigenvalues
+of latent temporal dynamics in exogenous variables. These figures
+represent complex planes. The dotted gray lines are unit circles,
+and colored points are eigenvalues of latent temporal dynamics,
+whose magnitude and argument indicate the decay rate and temporal frequency of a specific mode, respectively. Specifically, if the
+absolute value of an eigenvalue is greater than 1, the corresponding
+mode exhibits growth; if it is less than 1, it exhibits decay (please
+see Section 3.1.1 for a detailed approach to reading these components). Figure 1 (b-i) shows the weak growth modes in exogenous
+variables for the Republic of South Africa, and implies an increase
+in infections in South Africa due to 501.V2 mentioned above. Figure
+1 (b-ii) shows the strong growth modes in exogenous variables for
+the United States, where new infections surpassed 1 million in a
+single day for the first time [16]. Figure 1 (b-iii) shows the decay of
+exogenous variables for China. This period was toward the end of
+the lockdown in Shanghai, indicating that the spread of infections
+was beginning to ease, our result captures this precisely.
+
+Modeling Time-evolving Causality over Data Streams
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+TICC
+
+NOTEARS/++
+
+OrbitMap
+
+TimesNet
+
+ModePlait
+
+Stream Processing
+Forecasting
+Data Compression
+Interdependency
+Time-evolving Causality
+
+Table 2: Symbols and definitions.
+
+ARIMA/++
+
+Table 1: Capabilities of approaches.
+
+✓
+-
+
+✓
+✓
+-
+
+✓
+-
+
+✓
+✓
+✓
+-
+
+✓
+-
+
+✓
+✓
+✓
+✓
+✓
+
+𝑙𝑠 -steps-ahead future values. Figure 1 (c) shows snapshots of
+the 𝑙𝑠 = 10-steps-ahead future forecasting when given a current
+window. The blue vertical axes show the beginning of a current
+window 𝑡𝑚 and the current time point 𝑡𝑐 , and the red vertical axis
+shows the 𝑙𝑠 -step-ahead time point 𝑡𝑐 + 𝑙𝑠 . In addition, we show our
+estimated values with bold-colored lines (the originals are shown in
+gray). ModePlait successfully finds the current distinct dynamical
+pattern and generates future values continuously at any time.
+
+1.2
+
+Contributions
+
+In this paper, we propose ModePlait, which has all of the following
+desirable properties:
+• Effective: it discovers time-changing relationships between observations (i.e., time-evolving causality) based on monitoring
+transitions of distinct dynamical patterns (i.e., regimes).
+• Accurate: it theoretically discovers the time-evolving causality
+in data streams (please see Lemma 2 for details), and accurately
+forecast future values based on these relationships.
+• Scalable: it is fast and requires only constant computational time
+with regard to the entire stream length.
+
+2
+
+Related Work
+
+In this section, we briefly describe investigations related to our
+work. Table 1 summarizes the relative advantages of ModePlait
+with regard to five aspects.
+Time series modeling and forecasting. Time series modeling and
+forecasting are important areas that have attracted huge interest in
+many fields. Autoregressive integrated moving average (ARIMA) [7]
+and Kalman filters (KF) [15] are representative examples of traditional modeling and forecasting methods, and there have been
+many studies of their derivatives [14, 33, 43, 51]. TICC [24] characterizes the interdependence between different observations based
+on a Markov random field but cannot capture the causal relationships. Additionally, streaming algorithms have become more critical in terms of processing a substantial amount of data under
+time/memory limitations, and they have proved highly significant
+to the data mining and database community [5, 23, 29, 36]. OrbitMap [37] is the latest general method focusing on stream forecasting, and it can find the transitions between major dynamic
+time series patterns. However, it cannot discover the time-evolving
+causality between observations. Research on deep learning models
+for forecasting has been very active in recent years [41, 49, 61].
+TimesNet [58] is a TCN-based method that transforms a 1D time
+
+Symbol
+
+Definition
+
+𝑑
+𝑡𝑐
+𝑿
+𝑿𝑐
+
+Number of dimensions
+Current time point
+Co-evolving multivariate data stream (semi-infinite)
+Current window, i.e., 𝑿 𝑐 = 𝑿 [𝑡𝑚 : 𝑡𝑐 ] ∈ R𝑑 ×𝑁
+
+ℎ
+g(·)
+𝑯
+𝑘
+𝚽
+𝚲
+𝑾
+𝑩
+
+Embedding dimension
+Observable for time-delay embedding, i.e., 𝑔 : R → Rℎ
+Hankel matrix
+Number of modes
+Modes of the system, i.e., 𝚽 ∈ Rℎ×𝑘
+Eigenvalues of the system, i.e., 𝚲 ∈ R𝑘 ×𝑘
+Demixing matrix, i.e., 𝑾 = [𝒘1 , ..., 𝒘𝑑 ] ⊤ ∈ R𝑑 ×𝑑
+Causal adjacency matrix, i.e., 𝑩 ∈ R𝑑 ×𝑑
+
+𝒆 (𝑡 )
+𝑺 (𝑡 )
+𝒗 (𝑡 )
+
+𝑑
+Inherent signal at time point 𝑡 , i.e., 𝒆 (𝑡 ) = {𝑒 (𝑖 ) (𝑡 ) }𝑖=1
+𝑑
+Latent vectors at time point 𝑡 , i.e., 𝑺 (𝑡 ) = {𝒔 (𝑖 ) (𝑡 ) }𝑖=1
+𝑑
+Estimated vector at time point 𝑡 , i.e., 𝒗 (𝑡 ) = {𝑣 (𝑖 ) (𝑡 ) }𝑖=1
+
+D
+𝜽
+
+Self-dynamics factor set, i.e., D = {𝚽, 𝚲}
+Regime parameter set, i.e., 𝜽 = {𝑾, D (1) , ..., D (𝑑 ) }
+
+𝑅
+𝚯
+B
+𝛀
+
+Number of regimes
+Regime set, i.e., 𝚯 = {𝜽 1 , ..., 𝜽 𝑅 }
+Time-evolving causality, i.e., B = {𝑩 1 , ..., 𝑩𝑅 }
+Update parameter set, i.e., 𝛀 = {𝝎 1 , ..., 𝝎 𝑅 }
+
+F
+
+Full parameter set, i.e., F = {𝚯, 𝛀}
+
+series into 2D space based on multiple periods and captures complex temporal variations for forecasting. Although deep learningbased methods are compelling, their applicability to forecasting in
+a streaming fashion is limited due to the prohibitively high computational costs associated with time series analysis, which hinders
+continuous model updating with the most recent observations.
+Causal inference/discovery. Over decades, a wide range of studies have been conducted on causal inference/discovery [19, 26, 27,
+34, 52] and addressing challenges based on the concept of causality [12, 47, 57]. NOTEARS [62] is a new differentiable optimization framework for learning directed acyclic graphs, utilizing an
+acyclic regularization as a replacement for a combinatorial constraint. Granger causality [21] has been widely used to analyze
+multivariate time series data. However, Granger causality only indicates the presence of a predictive relationship [46]. Specifically,
+typical causality represents whether one observation causes another, while Granger causality represents whether one observation
+forecasts another [22]. In this paper, we focus on the cause-andeffect relationships that evolve over time in a data stream. We try to
+discover them based on the structural equation model [44], which
+is one of the most general formulations of causality.
+Consequently, none of these methods specifically focused on
+the discovery of the time-evolving causality and forecasting future
+values in a streaming fashion, simultaneously.
+
+3
+
+Proposed Model
+
+In this section, we present our proposed model. The main symbols we use in this paper are described in Table 2. Here, before
+introducing the main topic, we briefly describe the principles and
+concepts of ModePlait. We design our proposed model based
+on the structural equation model (SEM) [44], which is written as
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+Hankel matrix
+
+Interpretability of modes
+decay rate
+
+𝐇(")
+
+⇓
+
+ℎ
+
+ℎ
+
+𝑘"
+
+𝚽(")
+
+𝑁
+
+𝑘"
+
+𝑁−ℎ+1
+
+,
+
+𝜆!
+
+Im
+
+Inherent signal 𝐞(")
+
+⇓
+
+𝑑
+
+Self-dynamics factor set 𝒟(")
+𝚲(")
+
+Re
+
+𝑘"
+
+∠ 𝜆!
+
+eigenvalue 𝜆!
+frequency (1 ≤ 𝑗 ≤ 𝑘! )
+
+(a) Self-dynamics factor set (i.e., D (𝑖 ) = {𝚽 (𝑖 ) , 𝚲 (𝑖 ) })
+Inherent signals 𝐄
+
+⇓
+
+𝑑
+
+𝐞($)
+𝐞(&)
+
+Causal
+relationship 𝐁
+
+𝒟($)
+
+𝑑
+
+⋮
+
+𝐞(")
+
+𝑁
+
+Regime parameter set 𝜃
+
+Mixing matrix
+
+,
+
+𝐖 %$
+
+⇓
+
+Multivariate time series 𝐗
+
+𝑑
+
+⋮
+
+𝒟(")
+
+,
+
+𝑁
+𝑑
+(b) Single regime parameter set (i.e., 𝜽 = {𝑾, D (1) , ..., D (𝑑 ) })
+
+𝐖 %$
+
+𝑑
+
+Figure 2: Illustration of ModePlait: (a) we extract the latent temporal dynamics from the 𝑖-th univariate inherent signal 𝒆 (𝑖 ) ,
+which behaves as a dynamical system. (b) The multivariate time series is described by mixing matrix 𝑾 −1 and a collection of 𝑑
+self-dynamics factor sets {D (1) , ..., D (𝑑 ) }. The mixing matrix 𝑾 −1 is not the same matrix as the causal adjacency matrix 𝑩, it is
+instrumental in identifying the time-evolving causality.
+𝑿 sem = 𝑩 sem 𝑿 sem + 𝑬 sem , where 𝑿 sem is the observed variables,
+𝑩 sem is the causal adjacency matrix, and 𝑬 sem is a set of mutually
+independent exogenous variables with a non-Gaussian distribution.
+Note that we assume that the data generating process is linear, the
+causal network is a directed acyclic graph, and there are no unobserved confounders in this paper. The structural equation model
+can express a typical causality, however, in real-world applications,
+causal relationships change over time in accordance with the transitions of distinct dynamical patterns. In our model, we assume
+that the exogenous variables behave as a dynamical system; however, it is inappropriate to consider their time-evolution as a single
+dynamical system due to their independence from each other. In
+summary, given a multivariate data stream which contains various
+distinct dynamical patterns (i.e., regimes), we aim to discover the
+time-evolving causality and summarize an entire data stream on the
+above assumption. Specifically, we need to capture the following
+properties to achieve the above objective:
+(P1) latent temporal dynamics of exogenous variables
+(P2) dynamical pattern in a single regime
+So, how can we build our model that expresses both (P1) and (P2)?
+What is the acceptable mathematical model that summarizes a data
+stream and discovers the time-evolving causality? To handle (P1),
+we express each of the exogenous variables as the superposition of
+computed basis vectors (i.e., modes). We model (P2) by combining
+the above components. We provide our answers below.
+
+3.1
+
+Proposed Solution: ModePlait
+
+We now present our model in detail. First, we provide the definition
+for our proposed method.
+Definition 1 (Inherent signals: 𝑬). Let 𝑬 be a bundle of 𝑑
+mutually independent signals with a non-Gaussian distribution, i.e.,
+𝑬 = {𝒆 (𝑖 ) }𝑑𝑖=1 , where 𝒆 (𝑖 ) = {𝑒 (𝑖 ) (1), ..., 𝑒 (𝑖 ) (𝑡)} is the 𝑖-th univariate
+inherent signal. The main property is that they evolve over time.
+
+Figure 2 is an illustration of our proposed model. In the first half
+of this section, we describe (P1) the latent temporal dynamics of
+the 𝑖-th univariate inherent signal 𝒆 (𝑖 ) by introducing the selfdynamics factor set D (𝑖 ) , and next, we propose the parameter set
+𝜽 to represent (P2) regimes and an entire data stream.
+3.1.1 Latent temporal dynamics of an inherent signal (P1). First,
+we answer the fundamental question, namely, how can we extract
+the latent temporal dynamics from the 𝑖-th inherent signal (i.e.,
+𝒆 (𝑖 ) = {𝑒 (𝑖 ) (1), ..., 𝑒 (𝑖 ) (𝑡)}) and express it as a superposition of the
+modes? The difficulty arises from the fact that the latent dynamics
+in the system are generally multi-dimensional, making a single
+dimension inadequate for modeling the system. Here, we utilize
+state space augmentation methods to compensate for this inadequacy. In particular, we adopt time-delay embedding, which is
+effective in capturing nonlinear dynamics. Specifically, this is an
+established method for the geometric reconstruction of attractors
+for nonlinear systems based on the measurement of generic observables, g(𝑒 (𝑖 ) (𝑡)) B (𝑒 (𝑖 ) (𝑡), 𝑒 (𝑖 ) (𝑡 − 1), ..., 𝑒 (𝑖 ) (𝑡 − ℎ + 1)) ∈ Rℎ ,
+where ℎ is the embedding dimension. We form the Hankel matrix
+𝑯 (𝑖 ) ∈ Rℎ× (𝑡 −ℎ+1) by using the above observable g(·).
+
+|
+
+𝑯 (𝑖 ) = g(𝑒 (𝑖 ) (ℎ))
+
+|
+
+
+|
+g(𝑒 (𝑖 ) (ℎ + 1))
+|
+
+···
+
+
+|
+
+g(𝑒 (𝑖 ) (𝑡)) 
+
+|
+
+
+(1)
+
+As seen in Eq. (1), each state represented by a single measurement
+function is augmented with its past history. Furthermore, according
+to Takens’ embedding theorem [54], it is guaranteed that time-delay
+embedding produces a vector whose dynamics are diffeomorphic
+to the dynamics of the original state under certain conditions. Intuitively, the reconstruction theoretically preserves the properties of
+the original dynamical system, allowing an analysis of Hankel matrix to reveal important features that may not be directly apparent
+in the original data alone. In many cases, an embedding dimension
+may be chosen without sacrificing the diffeomorphism.
+
+Modeling Time-evolving Causality over Data Streams
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+We now extract the latent temporal dynamics expressed as the
+superposition of the modes from the 𝑖-th univariate inherent signal
+𝒆 (𝑖 ) using the above method. We thus introduce a time-evolving
+activity for describing the dynamical system of the 𝑖-th inherent
+signal 𝒆 (𝑖 ) . This activity is a latent vector 𝒔 (𝑖 ) (𝑡) ∈ C𝑘𝑖 , which is
+𝑘𝑖 -dimensional complex-valued latent vector at time point 𝑡, where
+𝑘𝑖 is the number of modes. Consequently, the dynamical system
+for the 𝑖-th univariate inherent signal 𝒆 (𝑖 ) can be described with
+the following equations:
+
+Model 2. Let 𝒔 (𝑖 ) (𝑡) be the 𝑘𝑖 -dimensional latent vector for the
+𝑖-th univariate inherent signal 𝑒 (𝑖 ) (𝑡) at time point 𝑡, 𝒆(𝑡) be the 𝑑dimensional inherent signals at time point 𝑡 (i.e., 𝒆(𝑡) = {𝑒 (𝑖 ) (𝑡)}𝑑𝑖=1 ),
+and 𝒗 (𝑡) be the 𝑑-dimensional estimated vector at time point 𝑡. The
+following equations govern the single regime,
+𝒔 (𝑖 ) (𝑡 + 1) = 𝚲 (𝑖 ) 𝒔 (𝑖 ) (𝑡) (1 ≤ 𝑖 ≤ 𝑑)
+
+Model 1. Let 𝒔 (𝑖 ) (𝑡) be the 𝑘𝑖 -dimensional latent vector at time
+point 𝑡 for 𝑖 ∈ {1, . . . , 𝑑 }. The following equations govern the 𝑖-th
+univariate inherent signal 𝒆 (𝑖 ) ,
+
+In Model 2, we require an additional parameter, demixing matrix 𝑾 ,
+which represents the relationships among 𝑑 inherent signals (i.e.,
+𝒆 (1) , ..., 𝒆 (𝑑 ) ) and is instrumental in identifying the time-evolving
+causality in data streams. However, there are indeterminacies in a
+mixing matrix (i.e., the inverse of a demixing matrix), so it is not
+the same matrix as the causal adjacency matrix 𝑩. We present the
+algorithm for obtaining 𝑩 from 𝑾 in Section 4.2.3. Consequently,
+we have the following:
+
+𝒔 (𝑖 ) (𝑡 + 1) = 𝚲 (𝑖 ) 𝒔 (𝑖 ) (𝑡)
+𝑒 (𝑖 ) (𝑡) = g −1 (𝚽 (𝑖 ) 𝒔 (𝑖 ) (𝑡))
+
+(2)
+
+where g −1 (·) : Rℎ → R is the inverse of the observables g(·), each
+column of 𝚽 (𝑖 ) is one mode, and 𝚲 (𝑖 ) is a diagonal matrix containing
+the 𝑘𝑖 eigenvalues corresponding to those modes.
+Note that the latent vector 𝒔 (𝑖 ) (𝑡) is expressed as a superposition of
+𝑘𝑖 modes. The eigenvalues 𝚲 (𝑖 ) ∈ C𝑘𝑖 ×𝑘𝑖 describe latent dynamical
+activities, and the modes 𝚽 (𝑖 ) ∈ Cℎ×𝑘𝑖 and g −1 (·) are the observation projections that generate the 𝑖-th univariate inherent signal
+𝑒 (𝑖 ) (𝑡) at each time point 𝑡. Consequently, we have the following:
+Definition 2 (Self-dynamics factor set: D (𝑖 ) ). Let D (𝑖 ) be
+a set of modes 𝚽 (𝑖 ) and eigenvalues 𝚲 (𝑖 ) , i.e., D (𝑖 ) = {𝚽 (𝑖 ) , 𝚲 (𝑖 ) },
+which represents the latent temporal dynamics of the 𝑖-th univariate
+inherent signal 𝑒 (𝑖 ) .
+We can interpret the features of the above model by focusing on the
+self-dynamics factor set D (𝑖 ) . Specifically, the eigenvalues 𝚲 (𝑖 ) imply the temporal dynamics of the modes 𝚽 (𝑖 ) , such as exponential
+growth/decay and oscillations. These are derived from a characteristic of a discrete dynamical system. Considering the eigenvalues
+𝚲 (𝑖 ) represent the behavior of a discrete dynamical system with
+sampling interval Δ𝑡, decay rate 𝑎 and temporal frequency 𝑏 of the
+𝑗-th mode 𝜑 𝑗 are shown as follows, using the 𝑗-th eigenvalue 𝜆 𝑗 :
+Re(log 𝜆 𝑗 )
+Im(log 𝜆 𝑗 )
+𝑎=
+, 𝑏=
+Δ𝑡
+Δ𝑡
+where Re and Im are the real and imaginary parts, respectively. In
+addition, note that log 𝜆 𝑗 = ln |𝜆 𝑗 | + 𝑖 arg 𝜆 𝑗 , and it can be said that
+the decay rates and temporal frequencies of the modes are given by
+the absolute values and arguments of the eigenvalues, respectively.
+3.1.2 Dynamical pattern in a single regime (P2). Thus, we have seen
+how to model the latent temporal dynamics of the 𝑖-th univariate
+inherent signal 𝒆 (𝑖 ) using self-dynamics factor set D (𝑖 ) . Here, let us
+tackle the next question, namely how can we describe the major dynamical pattern (i.e., regime) considering the time-evolving causality between observations in a data stream? We establish a model to
+combine the 𝑑 self-dynamics factor sets (i.e., D (1) , ..., D (𝑑 ) ) for generating the estimated vector 𝒗 (𝑡) ∈ R𝑑 at time point 𝑡. Also, we need
+a set of 𝑑 latent vectors (i.e., 𝑺 (𝑡) = {𝒔 (𝑖 ) (𝑡)}𝑑𝑖=1 ). Consequently, we
+extend Model 1, and the dynamical system for 𝑑-dimensional multivariate time series can be described with the following equations:
+
+𝑒 (𝑖 ) (𝑡) = g −1 (𝚽 (𝑖 ) 𝒔 (𝑖 ) (𝑡))
+𝒗 (𝑡) = 𝑾
+
+−1
+
+(1 ≤ 𝑖 ≤ 𝑑)
+
+(3)
+
+𝒆(𝑡)
+
+Definition 3 (Single regime parameter set: 𝜽 ). Let 𝜽 be a
+parameter set of a single regime, i.e., 𝜽 = {𝑾, D (1) , ..., D (𝑑 ) }, where
+𝑾 serves as the basis for generating the causal adjacency matrix 𝑩.
+Furthermore, we want to detect the transitions of regimes, which
+induce changes in causal relationships. Let 𝑅 denote the optimal
+number of regimes up to the time point 𝑡. Then, a data stream 𝑿 is
+summarized using a set of 𝑅 regimes (i.e., 𝜽 1, ..., 𝜽 𝑅 ). Consequently,
+a regime set for a data stream 𝑿 and time-evolving causality are
+defined as follows:
+Definition 4 (Regime set: 𝚯). Let 𝚯 be a parameter set of multiple regimes, i.e.,𝚯 = {𝜽 1, ..., 𝜽 𝑅 }, which describes multiple distinct
+dynamical patterns in an entire data stream.
+Definition 5 (Time-evolving causality: B). Let B be a parameter set of causal adjacency matrices, i.e., B = {𝑩 1, ..., 𝑩𝑅 }, which
+describes time-changing of causal relationships. Note that 𝑩𝑖 is a
+causal adjacency matrix corresponding to the 𝑖-th regime 𝜽 𝑖 .
+
+4
+
+Optimization Algorithm
+
+Thus far, we have shown how we describe the major dynamical
+pattern using the demixing matrix 𝑾 which can be transformed
+into a causal adjacency matrix 𝑩. In this section, we present an
+effective algorithm to identify the time-evolving causality B and
+estimate the regime set 𝚯. Figure 3 shows an overview of our
+proposed algorithm. We first present an effective way to estimate a
+new model parameter set from a multivariate time series, where we
+assume it has only a single regime. We then describe a streaming
+algorithm to identify B and maintain 𝚯 incrementally for multiple
+distinct dynamical patterns, simultaneously.
+
+4.1
+
+RegimeCreation
+
+We first propose an algorithm, namely RegimeCreation, for estimating a single regime parameter set 𝜃 = {𝑾, D (1) , ..., D (𝑑 ) } from
+a data stream 𝑿 . The algorithm consists of two main steps: (i) it
+decomposes 𝑿 into a demixing matrix 𝑾 and inherent signals 𝑬
+and (ii) it computes 𝑑 self-dynamics factor sets {D (1) , ..., D (𝑑 ) }
+according to Eq. (2). We use ICA for the decomposition of 𝑿 , where
+it is essential for identifying the optimal causality. Next, as regards
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+𝑏"!
+𝑏#!
+
+“Time-evolving”
+causality
+
+𝑏#"
+
+𝐗
+
+𝐗
+
+𝐜
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+Lemma 1 (Time complexity of RegimeCreation). The time
+complexity of RegimeCreation is 𝑂 (𝑁 (𝑑 2 + ℎ 2 ) + 𝑘 3 ), where 𝑘 =
+max𝑖 (𝑘𝑖 ). Please see Appendix A for details.
+
+𝐁
+
+𝑏!"
+𝑏#!
+
+Future values
+(unknown)
+
+𝑏#"
+
+4.2
+
+𝑑
+𝑡!
+
+𝑁
+
+𝜃!
+𝑅
+
+Mode
+Estimator
+
+Regime set
+
+Θ
+
+insert new regime
+
+Current window: 𝐗 𝐜
+
+Regime
+Creation
+
+𝐖
+
+,
+
+𝒟($)
+
+,
+
+𝑡! + 𝑙#
+
+⋮
+
+𝑡"
+
+Time 𝑡
+
+,
+
+𝒟(")
+
+Current regime: 𝜃 ! ∈ 𝒞
+
+𝐁
+
+Forecast
+𝑙! -steps-ahead
+future value
+i.e., 𝐯(𝑡! + 𝑙" )
+
+estimate
+
+Causal adjacency matrix
+
+Definition 6 (Update parameter: 𝝎). Let 𝝎 be a parameter
+set for updating a regime 𝜃 , i.e., 𝝎 = {{𝑷 (𝑖 ) }𝑑𝑖=1, {𝝐 (𝑖 ) }𝑑𝑖=1 }, where
+𝑷 (𝑖 ) = (𝑹 (𝑖 ) 𝑴 𝑹 ⊤
+) −1 and 𝝐 (𝑖 ) is the energy.
+(𝑖 )
+
+V!
+
+Figure 3: Overview of ModePlait algorithm: Given a data
+stream 𝑿 , it performs all the following tasks at every time
+point 𝑡𝑐 . Firstly, it searches for the best regime 𝜽 𝑐 for the current window 𝑿 𝑐 . It then forecasts the 𝑙𝑠 -steps-ahead future
+value, i.e., 𝒗 (𝑡𝑐 + 𝑙𝑠 ) by utilizing the best one. When the algorithm encounters an unknown pattern in 𝑿 𝑐 , it estimates a
+new regime 𝜽 and inserts it into 𝚯.
+computing the 𝑖-th self-dynamics factor set D (𝑖 ) , assume that we
+have the following data matrices based on the Hankel matrix 𝑯 (𝑖 ) :
+
+
+𝑳 (𝑖 ) = g(𝑒 (𝑖 ) (ℎ + 1)) · · · g(𝑒 (𝑖 ) (𝑡)) ∈ Rℎ× (𝑡 −ℎ)
+
+
+𝑹 (𝑖 ) = g(𝑒 (𝑖 ) (ℎ)) · · · g(𝑒 (𝑖 ) (𝑡 − 1)) ∈ Rℎ× (𝑡 −ℎ)
+And, we use the following weight cost function:
+min
+𝑨
+
+𝑡∑︁
+−1
+
+′
+𝜇 2(𝑡 −1−𝑡 ) ||g(𝑒 (𝑖 ) (𝑡 ′ + 1)) − 𝑨 (𝑖 ) g(𝑒 (𝑖 ) (𝑡 ′ ))|| 22
+
+𝑡 ′ =ℎ
+
+Streaming Algorithm
+
+Our next step is to answer the most important question: how can
+we employ our proposed model for identifying the causal adjacency
+matrix 𝑩 from the demixing matrix 𝑾 ∈ 𝜽 and forecasting future
+values in a streaming fashion? Before turning to the main topic, we
+provide the definitions of some key concepts.
+
+(4)
+
+= min ||(𝑳 (𝑖 ) − 𝑨 (𝑖 ) 𝑹 (𝑖 ) )𝑴 || 2𝐹
+
+Definition 7 (Full parameter set: F ). Let F be a full parameter set of ModePlait, i.e., F = {𝚯, 𝛀}, where 𝚯 and 𝛀 consist of 𝑅 regimes and update parameters, respectively, namely, 𝚯 =
+{𝜽 1, ..., 𝜽 𝑅 }, and 𝛀 = {𝝎 1, ..., 𝝎 𝑅 }.
+With the above definitions, the formal problem is as follows:
+Problem 1. Given a multivariate data stream 𝑿 , where 𝒙 (𝑡𝑐 ) is
+the most recent value at time point 𝑡𝑐 ,
+• Find the optimal full parameter set, i.e., F = {𝚯, 𝛀},
+• Discover the time-evolving causality, i.e., B,
+• Forecast an 𝑙𝑠 -steps-ahead future value, i.e., 𝒗 (𝑡𝑐 + 𝑙𝑠 ).
+Here, we refer to the regime for the current window 𝑿 𝑐 = 𝑿 [𝑡𝑚 :
+𝑡𝑐 ] as 𝜽 𝑐 , and the update parameter corresponding to 𝜽 𝑐 as 𝝎𝑐 . In
+addition, we need the latent vectors 𝑺 (𝑡𝑐 ) at the current time 𝑡𝑐 for
+forecasting an 𝑙𝑠 -steps-ahead future value 𝒗 (𝑡𝑐 + 𝑙𝑠 ), and so keep
+𝑐 . In summary, our proposed algorithm keeps them as the
+it as 𝑺𝑒𝑛
+𝑐 } for stream processing.
+model candidate C = {𝜽 𝑐 , 𝝎𝑐 , 𝑺𝑒𝑛
+
+𝑨
+
+where, 𝑨 (𝑖 ) is the transition matrix, from which the eigendecomposition yields the modes 𝚽 (𝑖 ) and the corresponding eigenvalues
+𝚲 (𝑖 ) , and 𝑴 = diag(𝜇𝑡 −ℎ−1, ..., 𝜇 0 ) ∈ R (𝑡 −ℎ) × (𝑡 −ℎ) is defined as a
+forgetting matrix, based on the recursive least squares principle. In
+addition, according to Koopman theory [32], while the transition
+matrix 𝑨 (𝑖 ) is a linear operator, it is applicable even to nonlinear
+dynamical systems, unlike the classical modal decomposition of
+linear time-invariant systems. Specifically, the analytical algorithm
+proceeds as follows:
+I. Compute the ICA of 𝑿 = 𝑾 −1 𝑬.
+II. Form the Hankel matrix 𝑯 (𝑖 ) according to Eq. (1).
+III. Build a pair of data matrices (𝑳 (𝑖 ) , 𝑹 (𝑖 ) ).
+IV. Compute the SVD of 𝑹 (𝑖 ) 𝑴 = 𝑼 (𝑖 ) 𝚺 (𝑖 ) 𝑽(𝑖⊤) . We automatically
+determine the optimal number of singular values 𝑘𝑖 by [20].
+V. Project the transition matrix 𝑨 (𝑖 ) onto the 𝑘𝑖 -dimensional subspace spanned by the left singular vector 𝑼 (𝑖 ) .
+𝑘𝑖 ×𝑘𝑖
+𝑨˜ (𝑖 ) = 𝑼 (𝑖⊤) 𝑨 (𝑖 ) 𝑼 (𝑖 ) = 𝑼 (𝑖⊤) 𝑳 (𝑖 ) 𝑴𝑽(𝑖 ) 𝚺 −1
+(𝑖 ) ∈ R
+VI. Compute the eigendecomposition of 𝑨˜ (𝑖 ) 𝒁 (𝑖 ) = 𝒁 (𝑖 ) 𝚲 (𝑖 ) . Note
+that the eigenvalues 𝚲 (𝑖 ) are identical to the 𝑘𝑖 leading eigenvalues of 𝑨 (𝑖 ) because the left singular vector 𝑼 (𝑖 ) is an orthogonal
+matrix.
+VII. Compute the modes 𝚽 (𝑖 ) = 𝑼 (𝑖 ) 𝒁 (𝑖 ) .
+
+4.2.1 Overview. We now introduce our streaming algorithm, ModePlait, which consists of the following algorithms. For detailed
+descriptions and pseudocode, we would refer you to Algorithm 1
+in Appendix A.
+• ModeEstimator: Estimates the optimal full parameter set F
+and the model candidate C which appropriately describes the
+current window 𝑿 𝑐 .
+• ModeGenerator: Forecasts an 𝑙𝑠 -steps-ahead future value, i.e.,
+𝒗 (𝑡𝑐 + 𝑙𝑠 ), and identifies the causal adjacency matrix 𝑩, using
+the model candidate C.
+• RegimeUpdater: Updates the current regime 𝜽 𝑐 using update
+parameter 𝝎𝑐 ∈ C and the most recent value 𝒙 (𝑡𝑐 ). This is only
+performed if a new regime is not created.
+The following sections provide detailed explanations.
+4.2.2 ModeEstimator. Given a new value 𝒙 (𝑡𝑐 ) at the current
+time 𝑡𝑐 , we first need to update incrementally the full parameter set
+F and the model candidate C, which best describes the current window 𝑿 𝑐 . Algorithm 2 (See Appendix A) is the ModeEstimator algorithm in detail. Here, let 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) be a new function for estimating the optimal parameter so that it minimizes the mean square errors between the current window 𝑿 𝑐 and the estimated window 𝑽 𝑐
+Í
+in Model 2, i.e., 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) = 𝑡𝑡𝑐=𝑡 +ℎ−1 ||𝒙 (𝑡) − 𝒗 (𝑡)||, where 𝑺 𝑐0
+𝑚
+represents the latent vectors at time point 𝑡𝑚 +ℎ −1. Note that when
+
+Modeling Time-evolving Causality over Data Streams
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+embedding the time series using g(·), the number of data points
+(namely, the number of columns in the Hankel matrix 𝑯 ) is partially
+reduced compared with before embedding. The most straightforward way to determine 𝑺 𝑐0 is to adopt {𝚽†(𝑖 ) g(𝑒 (𝑖 ) (𝑡𝑚 + ℎ − 1))}𝑑𝑖=1
+according to Eq. (3). However, the noisy initial conditions give rise
+to unexpected forecasting. Therefore, we optimize 𝑺 𝑐0 by using the
+Levenberg-Marquardt (LM) algorithm [39] and thus enable the effects of noise in observations to be removed. Here, we return to the
+ModeEstimator algorithm, which proceeds as follows:
+
+It is so efficient in terms of computational and memory requirements, while converging quickly, with no special parameters to
+tune. Here, we briefly describe the update process for 𝑾 :
+
+I. It optimizes initial condition 𝑺 𝑐0 , so that it minimizes the errors
+between the current window 𝑿 𝑐 and the current regime 𝜽 𝑐 .
+II. If 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) > 𝜏, it searches for a better regime 𝜽 ∈ 𝚯.
+III. If 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) > 𝜏 still holds, it creates a new regime for 𝑿 𝑐
+using RegimeCreation, and inserts it into 𝚯.
+
+In part (ii), we update the self-dynamics factor set D (𝑖 ) by utilizing
+the following recurrence:
+
+I. Compute the 𝑖-th univariate inherent signal g(𝑒 (𝑖 ) (𝑡𝑐 )) at the
+current time 𝑡𝑐 , by projecting 𝒙 (𝑡𝑐 ) onto 𝒘𝑖 , which is the 𝑖-th
+row vector of 𝑾 , before the update.
+II. Estimate the reconstruction error and the energy 𝝐 (𝑖 ) based on
+the value of g(𝑒 (𝑖 ) (𝑡𝑐 )),
+III. Update the estimates of 𝒘𝑖 using error and energy 𝝐 (𝑖 ) .
+
+𝑝𝑟𝑒𝑣
+
+𝑝𝑟𝑒𝑣
+
+𝑨𝑛𝑒𝑤
+(𝑖 ) = 𝑨 (𝑖 ) + (g(𝑒 (𝑖 ) (𝑡𝑐 )) − 𝑨 (𝑖 ) g(𝑒 (𝑖 ) (𝑡𝑐 − 1)))𝜸 (𝑖 )
+g(𝑒 (𝑖 ) (𝑡𝑐 − 1)) ⊤ 𝑷 (𝑖 )
+
+𝑝𝑟𝑒𝑣
+
+𝜸 (𝑖 ) =
+
+𝜇 + g(𝑒 (𝑖 ) (𝑡𝑐 − 1)) ⊤ 𝑷 (𝑖 ) g(𝑒 (𝑖 ) (𝑡𝑐 − 1))
+1 𝑝𝑟𝑒𝑣
+𝑝𝑟𝑒𝑣
+𝑷 𝑛𝑒𝑤
+(𝑖 ) = 𝜇 (𝑷 (𝑖 ) − 𝑷 (𝑖 ) g(𝑒 (𝑖 ) (𝑡𝑐 − 1))𝜸 (𝑖 ) )
+𝑝𝑟𝑒𝑣
+
+(5)
+
+4.2.3 ModeGenerator. The next algorithm is ModeGenerator,
+which incrementally identifies the causal adjacency matrix 𝑩 and
+forecasts an 𝑙𝑠 -steps-ahead future value 𝒗 (𝑡𝑐 + 𝑙𝑠 ) by using the
+model candidate C. As for forecasting, it generates the value of
+𝒗 (𝑡𝑐 + 𝑙𝑠 ) according to Eq. (3) with the most suitable regime 𝜽 𝑐 for
+𝑿 𝑐 , which is selected by ModeEstimator. On the other hand, we
+identify the causal adjacency matrix 𝑩 from the demixing matrix
+𝑾 ∈ 𝜽 𝑐 . A mixing matrix (i.e., the inverse of a demixing matrix)
+typically has the two major indeterminacies: the order and scaling
+of the independent components; however, we must address the
+above difficulties if we are to identify the optimal causal adjacency
+matrix [52]. Consequently, the algorithm for identifying the causal
+adjacency matrix 𝑩 proceeds as follows:
+
+In this equation, 𝚽 (𝑖 ) and 𝚲 (𝑖 ) are eigenvectors and eigenvalues
+of 𝑨 (𝑖 ) , respectively. This recurrence minimizes the weighted cost
+function as outlined in Eq. (4), focusing on a new value 𝒙 (𝑡𝑐 ),
+thereby adapting to most recent patterns. See Appendix A for details regarding the above formula. In summary, RegimeUpdater
+proceeds in the following manner:
+
+˜
+I. Find the permutation of rows of 𝑾 that yields a matrix 𝑾
+without any zeros on the main diagonal.
+˜ by its corresponding diagonal element
+II. Divide each row of 𝑾
+to yield a new matrix 𝑾˜ ′ with all ones on the diagonal.
+III. Compute an estimate 𝑩ˆ of 𝑩 using 𝑩ˆ = 𝑰 − 𝑾˜ ′ .
+IV. Finally, to find a causal order, compute the permutation matrix
+ˆ ⊤ , which minimizes the
+𝑲 of 𝑩ˆ that yields a matrix 𝑩˜ = 𝑲 𝑩𝑲
+˜
+sum of the elements in the upper triangular part of 𝑩.
+
+Lemma 3 (Time complexity of ModePlait). Based on Lemma
+Í
+1, the time complexity of ModePlait is at least 𝑂 (𝑁 𝑖 𝑘𝑖 + 𝑑ℎ 2 ),
+Í
+2
+2
+3
+and at most 𝑂 (𝑅𝑁 𝑖 𝑘𝑖 + 𝑁 (𝑑 + ℎ ) + 𝑘 ) per process. Please see
+Appendix A for details.
+
+This algorithm resolves two major indeterminacies in a mixing
+matrix in steps I and II. Moreover, it finds the causal order, in other
+words, it removes the insufficient connection in step IV. The causal
+relationships are already identified up to step III, but this step is
+important for visualizing the resulting directed acyclic graph.
+Lemma 2 (Causal identifiability). Causal discovery in ModePlait is equivalent to finding the causal adjacency matrix 𝑩 in
+ModeGenerator. Please see Appendix A for details.
+This lemma demonstrates theoretically that our proposed algorithm
+is capable of discovering causal relationships.
+4.2.4 RegimeUpdater. Finally, when an existing regime is selected
+as the current regime 𝜽 𝑐 from the regime set 𝚯, we update its parameters (i.e., 𝑾, D (1) , ..., D (𝑑 ) ) using a new value 𝒙 (𝑡𝑐 ) to ensure
+that this regime represents a more sophisticated dynamical pattern.
+In short, RegimeUpdater has two parts: (i) update the demixing matrix 𝑾 and (ii) update each self-dynamics factor set D (𝑖 ) . In part (i),
+we use an algorithm based on adaptive filtering techniques [25, 59].
+
+I. In accordance with the part (i) algorithm, update the demixing
+matrix 𝑾 using a new value 𝒙 (𝑡𝑐 ).
+II. Compute the current inherent signals 𝑬 𝑐 from the current window 𝑿 𝑐 using the updated demixing matrix 𝑾 .
+III. Update each self-dynamics factor set D (𝑖 ) according to Eq. (5).
+
+This theoretical analysis indicates that our proposed algorithm
+requires only constant computational time with regard to the entire
+data stream length 𝑡𝑐 . Therefore, ModePlait is practical for semiinfinite data streams in terms of execution speed.
+
+5
+
+Experiments
+
+In this section, we evaluate the performance of ModePlait using
+both synthetic and real-world datasets. We performed extensive
+experiments to answer the following questions.
+Q1. Effectiveness: How well does it find the time-evolving causality?
+Q2. Accuracy: How accurately does it discover time-evolving causality and forecast future values?
+Q3. Scalability: How does it scale in terms of computational time?
+Datasets & experimental setup. We used the following datasets:
+• (#0) synthetic: was generated based on a structural equation
+model [44]. Details are provided in Appendix B.
+• (#1) covid19: was obtained from Google COVID-19 Open Data [2]
+and consists of the number of infections in Japan, the United
+States, China, Italy, and the Republic of South Africa, covering
+over 900 daily entries.
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+Table 3: Causal discovering results with multiple temporal sequences to encompass various types of real-world scenarios.
+Models
+
+ModePlait
+
+CASPER
+
+DARING
+
+NoCurl
+
+NO-MLP
+
+NOTEARS
+
+LiNGAM
+
+GES
+
+Metrics
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+SHD
+
+SID
+
+1, 2, 1
+1, 2, 3
+1, 2, 2, 1
+1, 2, 3, 4
+1, 2, 3, 2, 1
+
+3.82
+4.48
+4.32
+4.21
+4.50
+
+4.94
+6.51
+5.88
+5.76
+6.11
+
+5.58
+5.97
+5.41
+6.22
+6.02
+
+7.25
+8.44
+8.41
+8.33
+8.28
+
+5.75
+5.81
+6.54
+6.12
+5.45
+
+8.58
+9.17
+9.17
+9.58
+7.77
+
+6.31
+6.13
+6.69
+6.10
+6.20
+
+9.90
+9.51
+10.0
+9.61
+9.83
+
+6.36
+6.44
+6.55
+6.62
+6.56
+
+8.74
+8.77
+8.72
+8.87
+8.83
+
+5.03
+5.69
+5.23
+5.73
+5.57
+
+9.95
+9.56
+9.54
+10.1
+9.11
+
+7.13
+6.79
+7.12
+7.10
+7.46
+
+8.23
+7.33
+8.65
+8.50
+8.05
+
+7.49
+7.03
+7.08
+7.29
+7.74
+
+11.7
+10.1
+9.77
+11.3
+12.1
+
+Table 4: Multivariate forecasting results for both synthetic and real-world datasets. We used forecasting steps 𝑙𝑠 ∈ {5, 10, 15}.
+Models
+
+ModePlait
+
+Metrics
+
+TimesNet
+
+PatchTST
+
+DeepAR
+
+OrbitMap
+
+ARIMA
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+#0 synthetic
+
+5
+10
+15
+
+0.722
+0.829
+0.923
+
+0.528
+0.607
+0.686
+
+0.805
+0.862
+0.940
+
+0.578
+0.655
+0.699
+
+0.768
+0.898
+0.973
+
+0.581
+0.649
+0.706
+
+1.043
+1.073
+1.137
+
+0.821
+0.849
+0.854
+
+0.826
+0.896
+0.966
+
+0.567
+0.646
+0.710
+
+0.962
+0.966
+0.982
+
+0.748
+0.752
+0.765
+
+#1 covid19
+
+5
+10
+15
+
+0.588
+0.740
+0.932
+
+0.268
+0.361
+0.461
+
+0.659
+0.841
+1.026
+
+0.314
+0.410
+0.516
+
+0.640
+1.053
+1.309
+
+0.299
+0.523
+0.686
+
+1.241
+1.255
+1.265
+
+0.691
+0.693
+0.690
+
+1.117
+1.353
+1.351
+
+0.646
+0.784
+0.792
+
+1.259
+1.260
+1.277
+
+0.675
+0.687
+0.718
+
+#2 web-search
+
+5
+10
+15
+
+0.573
+0.620
+0.646
+
+0.442
+0.481
+0.505
+
+0.626
+0.697
+0.701
+
+0.469
+0.514
+0.527
+
+0.719
+0.789
+0.742
+
+0.551
+0.604
+0.571
+
+1.255
+1.273
+1.300
+
+1.024
+1.044
+1.069
+
+0.919
+0.960
+0.828
+
+0.640
+0.717
+0.631
+
+1.038
+1.247
+1.038
+
+0.981
+1.037
+0.795
+
+#3 chicken-dance
+
+5
+10
+15
+
+0.353
+0.511
+0.653
+
+0.221
+0.325
+0.419
+
+0.759
+0.843
+0.883
+
+0.490
+0.564
+0.592
+
+0.492
+0.838
+0.972
+
+0.303
+0.535
+0.654
+
+0.890
+0.886
+0.862
+
+0.767
+0.753
+0.718
+
+0.508
+0.730
+0.903
+
+0.316
+0.476
+0.565
+
+2.037
+1.863
+1.792
+
+1.742
+1.530
+1.481
+
+#4 exercise
+
+5
+10
+15
+
+0.309
+0.501
+0.687
+
+0.177
+0.309
+0.433
+
+0.471
+0.630
+0.786
+
+0.275
+0.381
+0.505
+
+0.465
+0.789
+1.147
+
+0.304
+0.518
+0.758
+
+0.408
+0.509
+0.676
+
+0.290
+0.382
+0.475
+
+0.424
+0.616
+0.691
+
+0.275
+0.377
+0.434
+
+1.003
+1.104
+1.126
+
+0.748
+0.814
+0.901
+
+• (#2) web-search: consists of web-search counts collected over
+ten years related to beer queries on Google [3].
+• (#3) chicken-dance, (#4) exercise: were obtained from the CMU
+motion capture database [1] and consist of four dimensional
+vectors (left/right legs and arms).
+We compared our algorithm with the following seven baselines for
+causal discovery, namely CASPER [34], DARING [26], NoCurl [60],
+NOTEARS-MLP (NO-MLP) [63], NOTEARS [62], LiNGAM [52],
+and GES [10]. Besides, we also compared with the five following
+competitors for forecasting, namely TimesNet [58], PatchTST [41],
+DeepAR [49], OrbitMap [37], and ARIMA [7]. Details regarding the
+experimental settings are also provided in Appendix B.
+Q1. Effectiveness. We first demonstrated how effectively ModePlait discovers the time-evolving causality and forecasts future
+values in a streaming fashion using the epidemiological data stream
+(i.e., #1 covid19). Recall that Figure 1 shows ModePlait modeling
+and forecasting results. Figure 1 (a/b) shows graphical representations of the causal adjacency matrix 𝑩 and the eigenvalues 𝚲.
+Most importantly, the causal relationships evolve over time in accordance with the transitions of distinct dynamical patterns in the
+inherent signals 𝑬. ModePlait can continuously detect new actual
+causative events around the world (e.g., the discovery of a new
+lineage of the coronavirus in South Africa, the abrupt increase in
+coronavirus infections in the United States, and the strict, long-term
+
+lockdown in Shanghai). Figure 1 (c) shows streaming time series
+forecasting results. There have been multiple distinct patterns (e.g.,
+a rapid decrease in infection numbers in the Republic of South
+Africa), ModePlait adaptively captures the exponential patterns
+and forecasts future values close to the originals.
+Q2-1. Causal discovering accuracy. We next showed how accurately ModePlait can discover the time-evolving causality. We
+reported the structural Hamming distance (SHD) and the structural
+intervention distance (SID) [45]. SHD quantifies the difference in the
+causal adjacency matrix by counting missing, extra, and reversed
+edges and SID is particularly suited for evaluating causal discovering accuracy since it counts the number of couples (𝑖, 𝑗) such that
+¯ would be misthe interventional distribution 𝑝 (𝑥 𝑗 | do(𝑋𝑖 = 𝑥))
+calculated if we used the estimated causal adjacency matrix. Both
+metrics should be lower to represent better estimated adjacency
+matrices. Table 3 shows the causal discovering results of ModePlait and its baselines for various synthetic datasets, where the
+best and second-best levels of performance are shown in bold and
+underlined, respectively. Our method outperformed all baselines
+for every temporal sequence, which is consistent with the analysis
+provided in Lemma 2. This is because none of the competitors can
+handle the time-evolving causality in data streams.
+Q2-2. Forecasting accuracy. We evaluated the quality of ModePlait in terms of 𝑙𝑠 -steps-ahead forecasting accuracy. For this
+evaluation, we adopted the root mean square error (RMSE) and the
+
+Modeling Time-evolving Causality over Data Streams
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+Table 5: Ablation study results with forecasting steps 𝑙𝑠 ∈ {5, 10, 15} for both synthetic and real-world datasets.
+Datasets
+
+#0 synthetic
+
+Metrics
+
+#1 covid19
+
+#2 web-search
+
+#3 chicken-dance
+
+#4 exercise
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+RMSE
+
+MAE
+
+ModePlait (full)
+
+5
+10
+15
+
+0.722
+0.829
+0.923
+
+0.528
+0.607
+0.686
+
+0.588
+0.740
+0.932
+
+0.268
+0.361
+0.461
+
+0.573
+0.620
+0.646
+
+0.442
+0.481
+0.505
+
+0.353
+0.511
+0.653
+
+0.221
+0.325
+0.419
+
+0.309
+0.501
+0.687
+
+0.177
+0.309
+0.433
+
+w/o causality
+
+5
+10
+15
+
+0.759
+0.925
+1.001
+
+0.563
+0.696
+0.760
+
+0.758
+0.848
+1.144
+
+0.374
+0.466
+0.583
+
+0.575
+0.666
+0.708
+
+0.437
+0.511
+0.545
+
+0.391
+0.590
+0.821
+
+0.262
+0.398
+0.537
+
+0.375
+0.707
+0.856
+
+0.218
+0.433
+0.533
+
+Figure 4: Scalability of ModePlait: (left) Wall clock time vs.
+data stream length 𝑡𝑐 and (right) average time consumption
+for (#4) exercise. The vertical axis of these graphs is a logarithmic scale. ModePlait is superior to its competitors. It is
+up to 1,500x faster than its competitors.
+mean absolute error (MAE), both of which provide good results
+when they are close to zero. For all methods, we used one-third of
+the sequences to tune their parameters. Table 4 presents the overall forecasting results, where the best results are in bold and the
+second-best are underlined. For brevity, we only reported results of
+a representative synthetic dataset, which has the most complicated
+temporal sequence, “1, 2, 3, 2, 1”. We compared the two metrics
+when we varied the forecasting step (i.e., 𝑙𝑠 ∈ {5, 10, 15}). Our
+method achieved remarkable improvements over its competitors.
+While deep learning models (TimesNet, PatchTST, and DeepAR)
+exhibit high generality for time series modeling, their forecasting
+accuracy was poorer because they could not adjust the model parameters incrementally. OrbitMap is capable of handling multiple
+discrete nonlinear dynamics but misses the time-evolving causality,
+and thus was outperformed by our proposed method. ARIMA assumes linear relationships between time series data and so fails to
+accommodate complex and nonlinear data resulting in decreased
+forecasting accuracy.
+Q2-3. Ablation study. To quantitatively evaluate the impact of
+causal relationships on forecasting effectiveness, we additionally
+performed an ablation study by comparing a limited version of our
+method, namely w/o causality, whose demixing matrix 𝑾 was fixed
+to the identity matrix. Table 5 presents the overall results of our
+ablation study on ModePlait using both synthetic and real-world
+datasets. We can see that the w/o causality causes a significant drop
+in forecasting accuracy across all experimental settings. Therefore,
+we observed that the discovery of time-evolving causality in data
+streams boosts forecasting accuracy.
+Q3. Scalability. Finally, we evaluated the computational time
+needed by our streaming algorithm. Figure 4 compares the computational efficiencies of ModePlait and its competitors. It presents
+the computational time at each time point 𝑡𝑐 on the left, and the
+average computational time on the right. Note that both figures are
+
+shown on linear-log scales. Our method consistently outperformed
+its competitors in terms of computational time thanks to our incremental update, which aligns with the discussion presented in
+Lemma 3. OrbitMap was competitive, but it estimates model parameters via iterative optimization, the expectation-maximization
+algorithm, which makes it slower than our proposed algorithm.
+Other methods require a significant amount of learning time because they cannot update their models incrementally.
+
+6
+
+Conclusion
+
+In this paper, we focused on the summarization of an entire data
+stream, discovering the time-evolving causality in data streams,
+and forecasting future values incrementally. Our proposed method,
+namely ModePlait, exhibits all of the following desirable properties that we listed in the introduction:
+• It is Effective: It provides the time-evolving causality, namely
+insightful time-changing causal relationships in data streams.
+• It is Accurate: Our experiments demonstrated that ModePlait
+precisely discovers the time-evolving causality and forecasts
+future values in a streaming fashion.
+• It is Scalable: The computational time for our proposed algorithm does not depend on the data stream length.
+Acknowledgment. We would like to thank the anonymous referees for their valuable and helpful comments. This work was partly
+supported by “Program for Leading Graduate Schools” of the Osaka University, Japan, JST CREST JPMJCR23M3, JSPS KAKENHI
+Grant-in-Aid for Scientific Research Number JP24KJ1618.
+
+References
+[1] CMU motion capture database. http://mocap.cs.cmu.edu/.
+[2] Google COVID-19 Open Data Repository. https://health.google.com/covid-19/
+open-data/.
+[3] Google Trends. https://trends.google.co.jp/trends/.
+[4] Source codes and datasets. https://github.com/C-Naoki/ModePlait.
+[5] Charu C. Aggarwal (Ed.). 2007. Data Streams - Models and Algorithms. Advances
+in Database Systems, Vol. 31. Springer.
+[6] Kenneth A Bollen. 1989. Structural equations with latent variables. John Wiley &
+Sons.
+[7] George EP Box and Gwilym M Jenkins. 1976. Time series analysis: forecasting
+and control (Revised Edition). John Wiley & Sons.
+[8] C. Buckley. 2022. Relief, Reunions and Some Anxiety as Shanghai (Mostly)
+Reopens. New York Times (Jun. 1, 2022).
+[9] Yuxiao Cheng, Runzhao Yang, Tingxiong Xiao, Zongren Li, Jinli Suo, Kunlun He,
+and Qionghai Dai. 2023. CUTS: Neural Causal Discovery from Irregular TimeSeries Data. In The Eleventh International Conference on Learning Representations.
+[10] David Maxwell Chickering. 2002. Optimal structure identification with greedy
+search. Journal of machine learning research 3, Nov (2002), 507–554.
+[11] Pierre Comon. 1994. Independent component analysis, a new concept? Signal
+processing 36, 3 (1994), 287–314.
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+[12] Enyan Dai and Jie Chen. 2022. Graph-Augmented Normalizing Flows for Anomaly
+Detection of Multiple Time Series. In The Tenth International Conference on
+Learning Representations.
+[13] Gianmarco De Francisci Morales, Albert Bifet, Latifur Khan, Joao Gama, and Wei
+Fan. 2016. Iot big data stream mining. In Proceedings of the 22nd ACM SIGKDD
+Conference on Knowledge Discovery and Data Mining. 2119–2120.
+[14] Alysha M De Livera, Rob J Hyndman, and Ralph D Snyder. 2011. Forecasting
+time series with complex seasonal patterns using exponential smoothing. Journal
+of the American statistical association 106, 496 (2011), 1513–1527.
+[15] James Durbin and Siem Jan Koopman. 2012. Time series analysis by state space
+methods. Vol. 38. OUP Oxford.
+[16] H. Ellyatt. 2022. U.S. reports over 1 million new daily Covid cases as omicron
+surges. CNBC (Jan. 4 2022).
+[17] Paul Erdos, Alfréd Rényi, et al. 1960. On the evolution of random graphs. Publications of the Mathematical Institute of the Hungarian Academy of Sciences 5, 1
+(1960), 17–60.
+[18] S. Fink. 2020. South Africa announces a new coronavirus variant. New York
+Times (Dec. 21, 2020).
+[19] Daigo Fujiwara, Kazuki Koyama, Keisuke Kiritoshi, Tomomi Okawachi, Tomonori
+Izumitani, and Shohei Shimizu. 2023. Causal discovery for non-stationary nonlinear time series data using just-in-time modeling. In Conference on Causal
+Learning and Reasoning. PMLR, 880–894.
+[20] Matan Gavish
+√ and David L Donoho. 2014. The optimal hard threshold for singular
+values is 4/ 3. IEEE Transactions on Information Theory 60, 8 (2014), 5040–5053.
+[21] Clive WJ Granger. 1969. Investigating causal relations by econometric models
+and cross-spectral methods. Econometrica: journal of the Econometric Society
+(1969), 424–438.
+[22] Clive William John Granger and Paul Newbold. 2014. Forecasting economic time
+series. Academic press.
+[23] Michael Hahsler and Matthew Bolaños. 2016. Clustering data streams based on
+shared density between micro-clusters. IEEE transactions on knowledge and data
+engineering 28, 6 (2016), 1449–1461.
+[24] David Hallac, Sagar Vare, Stephen Boyd, and Jure Leskovec. 2017. Toeplitz inverse
+covariance-based clustering of multivariate time series data. In Proceedings of the
+23rd ACM SIGKDD Conference on Knowledge Discovery and Data Mining. 215–223.
+[25] Simon Haykin. 2002. Adaptive Filter Theory. Prentice Hall google schola 2 (2002),
+67–94.
+[26] Yue He, Peng Cui, Zheyan Shen, Renzhe Xu, Furui Liu, and Yong Jiang. 2021. Daring: Differentiable causal discovery with residual independence. In Proceedings
+of the 27th ACM SIGKDD Conference on Knowledge Discovery and Data Mining.
+596–605.
+[27] Song Jiang, Zijie Huang, Xiao Luo, and Yizhou Sun. 2023. CF-GODE: ContinuousTime Causal Inference for Multi-Agent Dynamical Systems. In Proceedings of
+the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining.
+997–1009.
+[28] Diviyan Kalainathan, Olivier Goudet, and Ritik Dutta. 2020. Causal Discovery
+Toolbox: Uncovering causal relationships in Python. Journal of Machine Learning
+Research 21 (2020), 37:1–37:5.
+[29] Koki Kawabata, Yasuko Matsubara, Takato Honda, and Yasushi Sakurai. 2020.
+Non-Linear Mining of Social Activities in Tensor Streams. In Proceedings of the
+26th ACM SIGKDD Conference on Knowledge Discovery and Data Mining. 2093–
+2102.
+[30] Tasuku Kimura, Yasuko Matsubara, Koki Kawabata, and Yasushi Sakurai. 2022.
+Fast Mining and Forecasting of Co-evolving Epidemiological Data Streams. In
+Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and
+Data Mining. 3157–3167.
+[31] Diederik P. Kingma and Jimmy Ba. 2015. Adam: A Method for Stochastic Optimization. In The Third International Conference on Learning Representations.
+[32] Bernard O Koopman. 1931. Hamiltonian systems and transformation in Hilbert
+space. Proceedings of the National Academy of Sciences 17, 5 (1931), 315–318.
+[33] Lei Li, B Aditya Prakash, and Christos Faloutsos. 2010. Parsimonious linear
+fingerprinting for time series. Proceedings of the VLDB Endowment 3, 1-2 (2010),
+385–396.
+[34] Fangfu Liu, Wenchang Ma, An Zhang, Xiang Wang, Yueqi Duan, and Tat-Seng
+Chua. 2023. Discovering Dynamic Causal Space for DAG Structure Learning.
+In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and
+Data Mining. 1429–1440.
+[35] Mohammad Saeid Mahdavinejad, Mohammadreza Rezvan, Mohammadamin
+Barekatain, Peyman Adibi, Payam Barnaghi, and Amit P Sheth. 2018. Machine
+learning for Internet of Things data analysis: A survey. Digital Communications
+and Networks 4, 3 (2018), 161–175.
+[36] Yasuko Matsubara and Yasushi Sakurai. 2016. Regime shifts in streams: Realtime forecasting of co-evolving time sequences. In Proceedings of the 22nd ACM
+SIGKDD Conference on Knowledge Discovery and Data Mining. 1045–1054.
+[37] Yasuko Matsubara and Yasushi Sakurai. 2019. Dynamic modeling and forecasting
+of time-evolving data streams. In Proceedings of the 25th ACM SIGKDD Conference
+on Knowledge Discovery and Data Mining. 458–468.
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+[38] Yasuko Matsubara, Yasushi Sakurai, Christos Faloutsos, Tomoharu Iwata, and
+Masatoshi Yoshikawa. 2012. Fast mining and forecasting of complex time-stamped
+events. In Proceedings of the 18th ACM SIGKDD Conference on Knowledge Discovery
+and Data Mining. 271–279.
+[39] Jorge J Moré. 2006. The Levenberg-Marquardt algorithm: implementation and
+theory. In Numerical analysis: proceedings of the biennial Conference held at
+Dundee, June 28–July 1, 1977. Springer, 105–116.
+[40] Kota Nakamura, Yasuko Matsubara, Koki Kawabata, Yuhei Umeda, Yuichiro
+Wada, and Yasushi Sakurai. 2023. Fast and Multi-aspect Mining of Complex Timestamped Event Streams. In Proceedings of the ACM Web Conference. 1638–1649.
+[41] Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. 2023.
+A Time Series is Worth 64 Words: Long-term Forecasting with Transformers. In
+The Eleventh International Conference on Learning Representations.
+[42] Kohei Obata, Koki Kawabata, Yasuko Matsubara, and Yasushi Sakurai. 2024.
+Dynamic Multi-Network Mining of Tensor Time Series. In Proceedings of the
+ACM on Web Conference. 4117–4127.
+[43] Spiros Papadimitriou, Anthony Brockwell, and Christos Faloutsos. 2003. Adaptive,
+hands-off stream mining. In Proceedings of 29th International Conference on Very
+Large Data Bases. Elsevier, 560–571.
+[44] Judea Pearl. 2009. Causality: Models, Reasoning, and Inference. Cambridge university press.
+[45] Jonas Peters and Peter Bühlmann. 2015. Structural intervention distance for
+evaluating causal graphs. Neural computation 27, 3 (2015), 771–799.
+[46] Jonas Peters, Dominik Janzing, and Bernhard Schölkopf. 2017. Elements of causal
+inference: foundations and learning algorithms. The MIT Press.
+[47] Jonathan G Richens, Ciarán M Lee, and Saurabh Johri. 2020. Improving the accuracy of medical diagnosis with causal machine learning. Nature communications
+11, 1 (2020), 3923.
+[48] Jakob Runge. 2018. Causal network reconstruction from time series: From theoretical assumptions to practical estimation. Chaos: An Interdisciplinary Journal of
+Nonlinear Science 28, 7 (2018).
+[49] David Salinas, Valentin Flunkert, Jan Gasthaus, and Tim Januschowski. 2020.
+DeepAR: Probabilistic forecasting with autoregressive recurrent networks. International Journal of Forecasting 36, 3 (2020), 1181–1191.
+[50] Jack Sherman and Winifred J Morrison. 1950. Adjustment of an inverse matrix
+corresponding to a change in one element of a given matrix. The Annals of
+Mathematical Statistics 21, 1 (1950), 124–127.
+[51] Qiquan Shi, Jiaming Yin, Jiajun Cai, Andrzej Cichocki, Tatsuya Yokota, Lei Chen,
+Mingxuan Yuan, and Jia Zeng. 2020. Block Hankel tensor ARIMA for multiple
+short time series forecasting. In Proceedings of the AAAI Conference on Artificial
+Intelligence, Vol. 34. 5758–5766.
+[52] Shohei Shimizu, Patrik O Hoyer, Aapo Hyvärinen, Antti Kerminen, and Michael
+Jordan. 2006. A linear non-Gaussian acyclic model for causal discovery. Journal
+of Machine Learning Research 7, 10 (2006).
+[53] Peter Spirtes, Clark N Glymour, and Richard Scheines. 2000. Causation, prediction,
+and search. MIT press.
+[54] Floris Takens. 2006. Detecting strange attractors in turbulence. In Dynamical
+Systems and Turbulence, Warwick 1980: proceedings of a symposium held at the
+University of Warwick 1979/80. Springer, 366–381.
+[55] Veronica Tozzo, Federico Ciech, Davide Garbarino, and Alessandro Verri. 2021.
+Statistical models coupling allows for complex local multivariate time series analysis. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery
+and Data Mining. 1593–1603.
+[56] Dingsu Wang, Yuchen Yan, Ruizhong Qiu, Yada Zhu, Kaiyu Guan, Andrew
+Margenot, and Hanghang Tong. 2023. Networked time series imputation via
+position-aware graph enhanced variational autoencoders. In Proceedings of the
+29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining.
+[57] Chenwang Wu, Xiting Wang, Defu Lian, Xing Xie, and Enhong Chen. 2023. A
+Causality Inspired Framework for Model Interpretation. In Proceedings of the
+29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining. ACM.
+[58] Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng
+Long. 2023. TimesNet: Temporal 2D-Variation Modeling for General Time Series
+Analysis. In The Eleventh International Conference on Learning Representations.
+[59] Bin Yang. 1995. Projection approximation subspace tracking. IEEE Transactions
+on Signal processing 43, 1 (1995), 95–107.
+[60] Yue Yu, Tian Gao, Naiyu Yin, and Qiang Ji. 2021. DAGs with no curl: An efficient DAG structure learning approach. In Proceedings of the 38th International
+Conference on Machine Learning. PMLR, 12156–12166.
+[61] Ailing Zeng, Muxi Chen, Lei Zhang, and Qiang Xu. 2023. Are Transformers
+Effective for Time Series Forecasting?. In Proceedings of the AAAI Conference on
+Artificial Intelligence.
+[62] Xun Zheng, Bryon Aragam, Pradeep K Ravikumar, and Eric P Xing. 2018. Dags
+with no tears: Continuous optimization for structure learning. In Advances in
+neural information processing systems, Vol. 31. 9492–9503.
+[63] Xun Zheng, Chen Dan, Bryon Aragam, Pradeep Ravikumar, and Eric P. Xing. 2020.
+Learning sparse nonparametric DAGs. In International Conference on Artificial
+Intelligence and Statistics.
+
+Modeling Time-evolving Causality over Data Streams
+
+Appendix
+A Optimization Algorithm
+Algorithm 1 ModePlait (𝒙 (𝑡𝑐 ), F , C)
+1:
+
+2:
+
+3:
+4:
+5:
+6:
+7:
+8:
+9:
+10:
+11:
+12:
+13:
+
+Input: (a) New value 𝒙 (𝑡𝑐 ) at time point 𝑡𝑐
+(b) Full parameter set F = {𝚯, 𝛀}
+𝑐 }
+(c) Model candidate C = {𝜽 𝑐 , 𝝎𝑐 , 𝒔𝑒𝑛
+Output: (a) Updated full parameter set F ′
+(b) Updated model candidate C ′
+(c) 𝑙𝑠 -steps-ahead future value 𝒗 (𝑡𝑐 + 𝑙𝑠 )
+(d) Causal adjacency matrix 𝑩
+/* Update current window 𝑿 𝑐 */
+𝑿 𝑐 ← 𝑿 [𝑡𝑚 : 𝑡𝑐 ]
+/* Estimate optimal regime 𝜽 */
+{F ′, C ′ } ← ModeEstimator (𝑿 𝑐 , F , C)
+/* Forecast future value and discover causal relationship */
+{𝒗 (𝑡𝑐 + 𝑙𝑠 ), 𝑩} ← ModeGenerator (C ′ )
+/* Update regime 𝜽 */
+if NOT create new regime then
+C ′ ← RegimeUpdater(𝑿 𝑐 , C ′ )
+end if
+return {F ′, C ′, 𝒗 (𝑡𝑐 + 𝑙𝑠 ), 𝑩}
+
+Algorithm 2 ModeEstimator (𝑿 𝑐 , F , C)
+1:
+
+2:
+3:
+4:
+5:
+6:
+7:
+8:
+9:
+10:
+11:
+12:
+13:
+14:
+15:
+
+Input: (a) Current window 𝑿 𝑐
+(b) Full parameter set F
+(c) Model candidate C
+Output: (a) Updated full parameter set F ′
+(b) Updated model candidate C ′
+/* Calculate optimal initial conditions */
+𝑺 𝑐0 ← arg min𝑺𝑐 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 )
+0
+if 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) > 𝜏 then
+/* Find better regime in 𝚯 */
+{𝑺 𝑐0 , 𝜽 𝑐 } ← arg min𝑺𝑐 ,𝜽 ∈𝚯 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 )
+0
+if 𝑓 (𝑿 𝑐 ; 𝑺 𝑐0 , 𝜽 𝑐 ) > 𝜏 then
+/* Create new regime */
+{𝜽 𝑐 , 𝝎𝑐 } ← RegimeCreation(𝑿 𝑐 )
+𝚯 ← 𝚯 ∪ 𝜽 𝑐 ; 𝛀 ← 𝛀 ∪ 𝝎𝑐
+end if
+end if
+𝑐 }
+F ′ ← {𝚯, 𝛀}; C ′ ← {𝜽 𝑐 , 𝝎𝑐 , 𝑺𝑒𝑛
+′
+′
+return F , C
+
+A.1
+
+Details of Eq. (5)
+
+Here, we introduce the recurrence relation of transition matrix 𝑨 (𝑖 ) .
+As mentioned earlier, we use the following cost function (below,
+index 𝑖 denoting 𝑖-th dimension is omitted for the sake of simplicity,
+e.g., we write 𝑨 (𝑖 ) as 𝑨):
+E=
+
+𝑡𝑐
+∑︁
+
+𝜇 𝑡𝑐
+
+−𝑡 ′
+
+||g(𝑒 (𝑡 ′ )) − 𝑨g(𝑒 (𝑡 ′ − 1))|| 22
+
+𝑡 ′ =𝑡𝑚 +ℎ
+
+=
+
+ℎ
+∑︁
+𝑙=1
+
+(𝑳(𝑙, :) − 𝑨(𝑙, :)𝑹)𝑴 (𝑳(𝑙, :) − 𝑨(𝑙, :)𝑹) ⊤
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+where, 𝑴, 𝑳 and 𝑹 are synonymous with the definition in Section
+4.1. Because we want to obtain 𝑨 that minimizes this cost function
+E, we differentiate it with respect to 𝑨.
+𝜕
+E = −2(𝑳(𝑙, :) − 𝑨(𝑙, :)𝑹)𝑴 𝑹 ⊤
+𝜕𝑨(𝑙, :)
+Solving the equation 𝜕E/𝜕𝑨(𝑙, :) = 0 for each 𝑙, 1 ≤ 𝑙 ≤ ℎ, the
+optimal solution for 𝑨 is given by
+𝑨 = (𝑳𝑴 𝑹 ⊤ )(𝑹𝑴 𝑹 ⊤ ) −1
+where we define
+𝑸 = 𝑳𝑴 𝑹 ⊤,
+
+𝑷 = (𝑹𝑴 𝑹 ⊤ ) −1
+
+The recurrence relations of 𝑸 can be written as
+𝑡𝑐
+∑︁
+
+𝑸=
+
+′
+
+𝜇𝑡𝑐 −𝑡 g(𝑒 (𝑡 ′ ))g(𝑒 (𝑡 ′ − 1)) ⊤
+
+𝑡 ′ =𝑡𝑚 +ℎ
+
+=𝜇
+
+𝑡∑︁
+𝑐 −1
+
+′
+𝜇𝑡𝑐 −𝑡 −1 g(𝑒 (𝑡 ′ ))g(𝑒 (𝑡 ′ − 1)) ⊤ + g(𝑒 (𝑡𝑐 ))g(𝑒 (𝑡𝑐 − 1)) ⊤
+
+𝑡 ′ =𝑡𝑚 +ℎ
+
+∴ 𝑸 𝑛𝑒𝑤 = 𝜇𝑸 𝑝𝑟𝑒𝑣 + g(𝑒 (𝑡𝑐 − 1))g(𝑒 (𝑡𝑐 )) ⊤
+
+(6)
+
+and similarly
+𝑷 𝑛𝑒𝑤 = (𝜇 (𝑷 𝑝𝑟𝑒𝑣 ) −1 + g(𝑒 (𝑡𝑐 ))g(𝑒 (𝑡𝑐 )) ⊤ ) −1
+
+(7)
+
+Here, we apply the Sherman-Morrison formula [50] to the RHS
+of Eq. (7). Note that g(𝑒 (𝑡𝑐 )) ⊤ 𝑷 𝑝𝑟𝑒𝑣 g(𝑒 (𝑡𝑐 )) > 0 because 𝑷 −1 =
+𝑹𝑴 𝑹 ⊤ is positive definite by definition.
+1 𝑝𝑟𝑒𝑣 𝑷 𝑝𝑟𝑒𝑣 g(𝑒 (𝑡𝑐 − 1))g(𝑒 (𝑡𝑐 − 1)) ⊤ 𝑷 𝑝𝑟𝑒𝑣
+) (8)
+(𝑷
+−
+𝜇
+𝜇 + g(𝑒 (𝑡𝑐 − 1)) ⊤ 𝑷 𝑝𝑟𝑒𝑣 g(𝑒 (𝑡𝑐 − 1))
+Finally, combining Eq. (6) and Eq. (8) gives the recurrence relations
+of 𝑨 for Eq. (5).
+∴ 𝑷 𝑛𝑒𝑤 =
+
+𝑨𝑛𝑒𝑤 = 𝑨𝑝𝑟𝑒𝑣 + (g(𝑒 (𝑡𝑐 )) − 𝑨𝑝𝑟𝑒𝑣 g(𝑒 (𝑡𝑐 − 1))𝜸
+𝜸=
+
+A.2
+
+g(𝑒 (𝑡𝑐 − 1)) ⊤ 𝑷 𝑝𝑟𝑒𝑣
+𝜇 + g(𝑒 (𝑡𝑐 − 1)) ⊤ 𝑷 𝑝𝑟𝑒𝑣 g(𝑒 (𝑡𝑐 − 1))
+
+Proof of Lemma 1
+
+Proof. The dominant steps in RegimeCreation are I, IV, and VI.
+The decomposition 𝑿 into 𝑾 −1 and 𝑬 using ICA requires 𝑂 (𝑑 2 𝑁 ).
+For each observation, the SVD of 𝑹 (𝑖 ) 𝑴 requires 𝑂 (ℎ 2 𝑁 ), and
+the eigendecomposition of 𝑨˜ (𝑖 ) takes 𝑂 (𝑘𝑖3 ). The straightforward
+way to process IV and VI is to perform the calculation 𝑑 times
+Í
+sequentially, i.e., they require 𝑂 (𝑑ℎ 2 𝑁 + 𝑖 𝑘𝑖3 ) in total. However,
+since these operations do not interfere with each other, they are
+simultaneously computed by parallel processing. Therefore, the
+time complexity of RegimeCreation is 𝑂 (𝑁 (𝑑 2 + ℎ 2 ) + 𝑘 3 ), where
+𝑘 = max𝑖 (𝑘𝑖 ).
+□
+
+A.3
+
+Proof of Lemma 2
+
+Proof. First, we need to formulate the causal structure. Here,
+we utilize the structural equation model [44], denoted by 𝑿 sem =
+𝑩 sem 𝑿 sem + 𝑬 sem . Because this model is known as the general formulation of causality, if 𝑩 sem in this model is identified, then it can
+be said that we discover causality. In other words, we need to prove
+that our proposed algorithm can find the causal adjacency matrix
+𝑩 aligning with this model. Solving the structural equation model
+
+KDD ’25, August 3–7, 2025, Toronto, ON, Canada
+
+−1 𝑬
+for 𝑿 sem , we obtain 𝑿 sem = 𝑾sem
+sem where 𝑾sem = 𝑰 − 𝑩 sem . It
+is shown that we can identify 𝑾sem in the above equation by ICA,
+except for the order and scaling of the independent components, if
+the observed data is a linear, invertible mixture of non-Gaussian
+independent components [11]. Thus, demonstrating that ModeGenerator precisely resolves the two indeterminacies of a mixing
+matrix 𝑾 −1 (i.e., the inverse of 𝑾 ∈ 𝜽 𝑐 ) suffices to complete the
+proof because 𝑾 is computed by ICA in RegimeCreation.
+First, we reveal that our algorithm can resolve the order indeterminacy. We can permutate the causal adjacency matrix 𝑩 to strict
+lower triangularity thanks to the acyclicity assumption [6]. Thus,
+correctly permuted and scaled 𝑾 is a lower triangular matrix with
+all ones on the diagonal. It is also said that there would only be one
+way to permutate 𝑾 , which meets the above condition [52]. Thus,
+ModeGenerator can identify the order of a mixing matrix by the
+process in step I (i.e., finding the permutation of rows of a mixing
+matrix that yields a matrix without any zeros on the main diagonal).
+Next, with regard to the scale of indeterminacy, it is apparent that
+we only need to focus on the diagonal element, remembering that
+the permuted and scaled 𝑾 has all ones on the diagonal. Therefore,
+we prove that ModeGenerator can resolve the order and scaling
+of the indeterminacies of a mixing matrix 𝑾 −1 .
+□
+
+A.4
+
+Proof of Lemma 3
+
+Proof. For each time point, ModePlait first runs ModeEstimator, which estimates the optimal full parameter set F and the model
+candidate C for the current window 𝑿 𝑐 . If the current regime 𝜽 𝑐
+Í
+Í
+fits well, it takes 𝑂 (𝑁 𝑖 𝑘𝑖 ) time. Otherwise, it takes 𝑂 (𝑅𝑁 𝑖 𝑘𝑖 )
+time to find a better regime in 𝚯 ∈ F . Furthermore, if ModePlait
+encounters an unknown pattern, it runs RegimeCreation, which
+takes 𝑂 (𝑁 (𝑑 2 + ℎ 2 ) + 𝑘 3 ) time. Subsequently, it runs ModeGenerator to identify the causal adjacency matrix and forecast an
+𝑙𝑠 -steps-ahead future value, which takes 𝑂 (𝑑 2 ) and 𝑂 (𝑙𝑠 ) time, respectively. Note that 𝑙𝑠 is negligible because of the small constant
+value. Finally, when ModePlait does not create a new regime, it
+executes RegimeUpdater, which needs 𝑂 (𝑑ℎ 2 ) time. Thus, the toÍ
+tal time complexity is at least 𝑂 (𝑁 𝑖 𝑘𝑖 + 𝑑ℎ 2 ) time and at most
+Í
+𝑂 (𝑅𝑁 𝑖 𝑘𝑖 + 𝑁 (𝑑 2 + ℎ 2 ) + 𝑘 3 ) time per process.
+□
+
+B
+
+Experimental Setup
+
+In this section, we describe the experimental setting in detail. We
+conducted all our experiments on an Intel Xeon Platinum 8268
+2.9GHz quad core CPU with 512GB of memory and running Linux.
+We normalized the values of each dataset based on their mean and
+variance (z-normalization). The length of the current window 𝑁
+was 50 steps in all experiments.
+Generating the Datasets. We randomly generated synthetic multivariate data streams containing multiple clusters, each of which
+exhibited a certain causal relationship. For each cluster, the causal
+adjacency matrix 𝑩 was generated from a well-known random
+graph model, namely Erdös-Rényi (ER) [17] with edge density 0.5
+and the number of observed variables 𝑑 was set at 5. The data generation process was modeled as a structural equation model [44], where
+each value of the causal adjacency matrix 𝑩 was sampled from a
+uniform distribution U (−2, −0.5) ∪ (0.5, 2). In addition, to demonstrate the time-changing nature of exogenous variables, we allowed
+
+Naoki Chihara, Yasuko Matsubara, Ren Fujiwara, and Yasushi Sakurai
+
+2 (i.e., 𝑒 (𝑡) ∼ Laplace(0, 𝜎 2 ))
+the inherent signals variance 𝜎𝑖,𝑡
+(𝑖 )
+𝑖,𝑡
+2 ),
+to change over time. Specifically, we introduced ℎ𝑖,𝑡 = log(𝜎𝑖,𝑡
+which evolves according to an autoregressive model, where the
+coefficient and noise variance of the autoregressive model were
+sampled from U (0.8, 0.998) and U (0.01, 0.1), respectively.
+The overall data stream was then generated by constructing a
+temporal sequence of cluster segments and each segment had 500
+observations (e.g., “1, 2, 1” consists of three segments containing two
+types of causal relationships and its total sample size is 1, 500). We
+ran our experiments on five different temporal sequences: “1, 2, 1”,
+“1, 2, 3”, “1, 2, 2, 1”, “1, 2, 3, 4”, and “1, 2, 3, 2, 1” to encompass various
+types of real-world scenarios.
+Baselines. The details of the baselines we used throughout our
+extensive experiments are summarized as follows:
+(1) Causal discovering methods
+• CASPER [34]: is a state-of-the-art method for causal discovery, integrating the graph structure into the score function and
+reflecting the causal distance between estimated and ground
+truth causal structure. We tuned the parameters by following
+the original paper setting.
+• DARING [26]: introduces an adversarial learning strategy to
+impose an explicit residual independence constraint for causal
+discovery. We searched for three types of regularization penalties
+{𝛼, 𝛽, 𝛾 } ∈ {0.001, 0.01, 0.1, 1.0, 10}.
+• NoCurl [60]: uses a two-step procedure: initialize a cyclic solution first and then employ the Hodge decomposition of graphs.
+We set the optimal parameter presented in the original paper.
+• NOTEARS-MLP [63]: is an extension of NOTEARS [62] (mentioned below) for nonlinear settings, which aims to approximate
+the generative structural equation model by MLP. We used the
+default parameters provided in authors’ codes2 .
+• NOTEARS [62]: is a differentiable optimization method with an
+acyclic regularization term to estimate a causal adjacency matrix.
+We used the default parameters provided in authors’ codes2 .
+• LiNGAM [52]: exploits the non-Gaussianity of data to determine
+the direction of causal relationships. It has no parameters to set.
+• GES [10]: is a traditional score-based bayesian algorithm that
+discovers causal relationships in a greedy manner. It has no
+parameters to set. We employed BIC as the score function and
+utilized the open-source in [28].
+(2) Time series forecasting methods
+• TimesNet/PatchTST [41, 58]: are state-of-the-art TCN-based and
+Transformer-based methods, respectively. The past sequence
+length was set as 16 (to match the current window length). Other
+parameters followed the original paper setting.
+• DeepAR [49]: models probabilistic distribution in the future,
+based on RNN. We built the model with 2-layer 64-unit RNNs.
+We used Adam optimization [31] with a learning rate of 0.01 and
+let it learn for 20 epochs with early stopping.
+• OrbitMap [37]: finds important time-evolving patterns for stream
+forecasting. We determined the optimal transition strength 𝜌 to
+minimize the forecasting error in training.
+• ARIMA [7]: is one of the traditional time series forecasting approaches based on linear equations. We determined the optimal
+parameter set using AIC.
+2 https://github.com/xunzheng/notears
+
+

@@ -1,0 +1,105 @@
+\section{System Design}
+\label{sec:design}
+
+
+The ZeroCausal pipeline operates across five main modules: (1) Event Extraction \& Binning, (2) Online Causal Discovery, (3) Structural Novelty Tracking, (4) Hybrid Anomaly Scoring, and (5) Conformal Calibration \& Adaptive Thresholding. Figure \ref{fig:architecture} illustrates the end-to-end architecture.
+
+\begin{figure*}[t]
+\centerline{\includegraphics[width=0.9\linewidth]{results/final/zerocausal_architecture.png}}
+\caption{End-to-end ZeroCausal data processing and anomaly detection pipeline. Raw audit logs are binned into 1-second windows, parsed into provenance-graph edge counts, and fed into online PCMCI causal discovery. The resulting SCM is used to score each window with a Hybrid Causal Anomaly Score (H-CAS); the score is then calibrated by a conformal prediction layer with online threshold adaptation.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Online Causal Discovery}
+Given a multivariate streaming time-series $X_t \in \mathbb{R}^d$ corresponding to edge occurrence counts in provenance subgraphs, we perform online causal discovery using the \textbf{PCMCI} algorithm \cite{pcmci2019} under the \textbf{Tigramite} framework. Event streams are aggregated into non-overlapping windows of width $W$. We default to $W = 1$\,s. This window size is carefully selected to match the temporal granularity of system-level APT stages. Cyberattacks (such as initial access, dropping malicious payloads, privilege escalation, or credential dumping) typically execute via automated scripts that run within sub-second or multi-second bursts. A large window size (e.g., minutes) would dilute these rare event spikes within the high volume of background benign events, severely reducing detection sensitivity. Conversely, sub-second windows can lead to excessive statistical sparsity and computational overhead. For lower-density telemetry where events are less frequent (e.g., BETH's Linux sysdig host logs), we scale the window to $W = 10$\,s to ensure stable count statistics. Thus, the window size is a user-configurable parameter that security operators tune to align with host event density and target attack velocities. PCMCI consists of two main phases:
+\begin{enumerate}
+\item \textbf{PC Path Search}: Determines the conditioning sets for each variable by selecting potential causal parents $\widehat{\mathcal{P}}^+(X^j)$.
+\item \textbf{MCI (Momentary Conditional Independence) Test}: Applies Partial Correlation (\texttt{ParCorr}) test statistics at significance level $\alpha_{\text{pcmci}}$:
+\begin{equation}
+\rho(X_t^j, X_{t-\tau}^i \mid \widehat{\mathcal{P}}(X_t^j), \widehat{\mathcal{P}}(X_{t-\tau}^i) \setminus \{X_{t-\tau}^i\})
+\end{equation}
+This identifies actual causal parent-child relationships with a maximum time lag $\tau_{\max} = 2$ s (supporting multi-step APT chains). 
+
+\textbf{Statistical Assumptions and Poisson Violations.}~The use of ParCorr as the conditional independence test assumes linear relationships and joint Gaussian noise. However, provenance graph edge counts are discrete, Poisson-distributed integers. For sparse features ($\lambda \ll 1$), these event count distributions are heavily zero-inflated and far from Gaussian. This violation of Gaussianity means that PCMCI's analytical p-values are approximations rather than exact tests, which can potentially lead to spurious causal edge discovery or missed true relationships. To mitigate this approximation error, simple preprocessing transformations such as log-scaling ($\log(1 + \text{count})$) can be applied to align counts closer to Gaussianity, or computationally heavier non-parametric tests (such as \texttt{CMIknn}) can be substituted. In our streaming framework, ParCorr is justified as a first-order approximation due to its high efficiency.
+
+\textbf{Computational Complexity.}~The formal computational complexity of PCMCI consists of two components: the PC path search phase, which scales as $O(d^k T)$ where $k$ is the maximum conditioning set size (which grows with graph density), and the MCI test phase, which scales as $O(d^2 \tau_{\max} T)$ where $\tau_{\max}$ is the maximum lag. For high-dimensional graphs, the PC phase cost can dominate if the graph is dense. However, in host auditing telemetry, the provenance graphs are extremely sparse ($k \ll d$), meaning the PC conditioning sets remain very small. Consequently, the PC phase overhead is negligible in practice, and the effective complexity of the streaming evaluation scales close to $O(d^2 \tau_{\max} T)$ as shown by the window timing breakdown in Table~\ref{tab:runtime}.
+\end{enumerate}
+
+The resulting adjacency matrix defines the structural dependencies of the system's baseline.
+
+\subsection{Causal Regression Model}
+For each variable $X^j$ in the discovered baseline feature set, we model its normal mechanism using a Structural Causal Model (SCM) based on its parents:
+\begin{equation}
+X^j_t = f_j(\widehat{\mathcal{P}}(X^j_t)) + \epsilon^j_t
+\end{equation}
+where $f_j$ is a regression mechanism fitted online on the training proper partition, and $\epsilon^j_t$ is the residual noise. We evaluate both a lightweight linear SCM and a non-linear Random Forest SCM. The Random Forest variant can capture complex parent interactions, while the linear variant is often more stable on sparse, zero-inflated provenance counts. To prevent division-by-zero on highly invariant features, we enforce a standard deviation floor $\sigma_{\text{floor}} = 1.0$:
+\begin{equation}
+\tilde{\sigma}_j = \max(\text{std}(\epsilon^j), \sigma_{\text{floor}})
+\end{equation}
+where $\text{std}(\cdot)$ denotes the standard deviation.
+
+\subsection{Structural Novelty Tracking}
+APT attacks often introduce novel behaviors (e.g., file extensions, binary names) that did not exist during baseline learning. ZeroCausal captures these as \textbf{Structural Novelties}:
+\begin{itemize}
+\item Let $E_{\text{test}}$ be the set of active edges in the current test window.
+\item Any edge $e \in E_{\text{test}} \setminus V_{\text{baseline}}$ (where $V_{\text{baseline}}$ is the set of features in the baseline SCM) is flagged.
+\item For novel edges, we assign a minimal p-value ($p_e = 10^{-15}$) and a low standard deviation floor ($\sigma_e = 0.1$) to signal severe mechanism violations.
+\end{itemize}
+
+\subsection{Hybrid Causal Anomaly Score (H-CAS)}
+Rather than relying solely on residual errors or p-values, ZeroCausal defines a \textbf{Hybrid Causal Anomaly Score (H-CAS)} that combines the strength of both.
+Unlike Causal-IDS~\cite{causalids2026}, which uses a pure SCM-violation score derived solely from causal p-values, H-CAS fuses two complementary signals: the causal p-value component (reflecting mechanism-violation probability) and an empirical residual CDF component (capturing overall energy deviation from normal). This hybrid construction improves robustness when individual causal p-values are imprecisely estimated under contaminated or low-sample training.
+\begin{enumerate}
+\item \textbf{Causal p-value Component}: Measures the probability of observing the SCM residuals under the normal mechanism model:
+\begin{equation}
+p_{\text{val}}^j = 2 \cdot \left(1 - \Phi\left(\left|\frac{\epsilon^j_t}{\tilde{\sigma}_j}\right|\right)\right)
+\end{equation}
+Under $H_0$ (normal execution), $p_{\text{val}}^j \sim \mathcal{U}(0,1)$. Under $H_1$ (attack), the minimum p-value $p_{\min} = \min_j p_{\text{val}}^j$ tends to cluster near 0; we approximate its distribution as a flexible parametric heuristic $\text{Beta}(a_p, b_p)$, where the shape parameters are tuned on a held-out validation set. This is not a theoretical guarantee under $H_1$, but rather a convenient, empirically calibrated model of anomaly severity.\footnote{Because $p_{\min}$ is computed over $d$ correlated, temporally autocorrelated residuals, the $\chi^2$ approximation for the aggregate residual statistic $\chi^2_{\text{stat}}$ is imperfect. However, the downstream conformal prediction layer calibrates all thresholds empirically on real validation scores, automatically absorbing any Type~I error inflation from the minimum p-value calculation and providing distribution-free false alarm guarantees.}
+\item \textbf{Normalized Residual Component}: Captures overall energy deviation using an empirical CDF.
+% Instead of the parametric Chi-squared CDF, we use an empirical CDF (eCDF)
+% built from the calibration set of normal residuals. This avoids the assumption
+% of independent residuals and is more robust to autocorrelation.
+% The residual anomaly score is:
+% S_res = F̂_ε(∑_j (ε_t^j / σ̃_j)^2)
+% where F̂_ε is the empirical CDF of the squared residual energies observed
+% during calibration. The final CAS remains:
+% CAS_t = w·(1 − min_j p_val^j) + (1 − w)·S_res
+\begin{equation}
+\chi^2_{\text{stat}} = \sum_{j=1}^d \left(\frac{\epsilon^j_t}{\tilde{\sigma}_j}\right)^2
+\end{equation}
+The residual anomaly score is computed as the proportion of calibration windows with smaller or equal energy:
+\begin{equation}
+S_{\text{res}} = \hat{F}_{\epsilon}(\chi^2_{\text{stat}})
+\end{equation}
+\end{enumerate}
+
+The final hybrid score combines the minimum p-value and the residual score:
+\begin{equation}
+\text{H-CAS}_t = w \cdot (1 - \min_{j} p_{\text{val}}^j) + (1-w) \cdot S_{\text{res}}
+\end{equation}
+
+\subsection{Conformal Prediction \& Online Calibration}
+To map $\text{H-CAS}_t$ to statistical decisions with conformal false-alarm controls, we use split conformal prediction \cite{shafer2008, vovk2005algorithmic, angelopoulos2021gentle}. A rolling calibration queue of $M = 245$ recent normal scores is maintained; only non-alarmed steps are added to prevent contamination:
+\begin{itemize}
+\item Calibration scores are kept sorted: $s_1 \leq s_2 \leq \dots \leq s_M$.
+\item For a new test score $S_{t}$, the conformal p-value is computed via binary search:
+\begin{equation}
+\text{conf\_pval}(S_t) = \frac{1}{M+1} \sum_{i=1}^M \mathbb{I}(s_i \geq S_t) + \frac{1}{M+1}
+\end{equation}
+\item An alert is raised if $\text{conf\_pval}(S_t) < \alpha_t$.
+\item To handle concept drift, the threshold $\alpha_t$ adapts online using a stochastic feedback loop:
+\begin{equation}
+\alpha_{t+1} = \alpha_t + \eta \cdot (\text{target\_fpr} - \mathbb{I}(\text{Alarm Raised}))
+\end{equation}
+where $\eta$ is the learning rate (default 0.05).
+
+\textbf{Coverage Guarantees and Exchangeability.}~Standard split conformal prediction guarantees distribution-free marginal coverage (controlling the false alarm rate at step $t$ strictly below the target significance $\alpha_t$) under the assumption that calibration and test scores are \textit{exchangeable} (which is satisfied if the data stream is stationary). In realistic security telemetry, this exchangeability is violated by benign concept drift. The online calibration update in Equation~9 adjusts $\alpha_t$ empirically in response to alarms, but it does not carry formal mathematical coverage proofs under non-stationary regimes. We frame this online conformal calibration following Barber et al. (2023) "Conformal Prediction Beyond Exchangeability" as an approximately-guaranteed, empirically-controlled framework under drift rather than a strict mathematical guarantee.
+
+\item \textbf{AdaptiveWindowDetector.}~The change-point detector monitors the streaming features online using two sliding windows: a short-term window of length $L_s$ (default 30 steps) representing the local state, and a long-term window of length $L_l$ (default 200 steps) representing the historical baseline. At each step, it computes Welch's $t$-statistic per feature $j$ to check if the mean has shifted significantly:
+\begin{equation}
+t_j = \frac{|\bar{x}^{\text{short}}_j - \bar{x}^{\text{long}}_j|}{\sqrt{s^2_{\text{short},j}/L_s + s^2_{\text{long},j}/L_l}}
+\end{equation}
+A change-point is declared when the maximum absolute $t$-statistic across all dimensions exceeds a threshold $\theta$ (default 3.0): $\max_j |t_j| > \theta$. Upon detection, the detector truncates the history, triggers an online SCM refit on the most recent $\max(50, L_l)$ windows, and flushes the conformal calibration queue, repopulating it with post-drift normal scores. In our evaluations, the detector's window parameters are configured via command-line arguments to fit each dataset's event density (e.g., $L_s=10, L_l=50, \theta=4.0$ for OpTC and NODLINK to enable rapid adaptation on high-frequency streams). This enables graceful adaptation to benign concept drift without manual retraining.
+\end{itemize}
+
+\textbf{Multiple Testing Defense.}~The minimum p-value operation across $d$ features (Eq.~7) would inflate Type~I error if used as a direct hypothesis test. Crucially, ZeroCausal does \textit{not} test individual features or report feature-level hypothesis rejections to the user. Instead, the minimum p-value serves purely as an internal scoring heuristic that is combined with the residual energy score to form a single scalar H-CAS score (Eq.~7). The conformal alarm decision is made on this \textit{single scalar} score. Under strict exchangeability, conformal prediction provides distribution-free \textit{marginal coverage}---the probability that any single test window triggers a false alarm is bounded by $\alpha_t$, regardless of how the CAS score was constructed. This is the target behavior for a streaming alarm system: the expected false alarm rate per window is controlled. Family-wise error rate (FWER) across features is not the relevant criterion because ZeroCausal raises a single alarm per window, not $d$ simultaneous alarms. Thus, no Bonferroni correction is needed to maintain the target false alarm rate.

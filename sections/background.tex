@@ -1,0 +1,26 @@
+\section{Background \& Related Work}
+
+\subsection{Provenance-Based IDS}
+Provenance graphs represent system history by capturing relationships between system entities (processes, files, network sockets). Modern provenance IDS (e.g., OCR-APT \cite{ocrapt2025}, TraceCluster \cite{tracecluster2026}, StageFinder \cite{stagefinder2026}) construct subgraphs and apply Graph Neural Networks (GNNs) or sequence-based autoencoders to detect anomalies. However, all these models rely on offline, benign-only training datasets. If an attacker contaminates the training set, these models learn to classify the malicious behavior as normal.
+
+Quantitatively, \textbf{OCR-APT} \cite{ocrapt2025} reports an APT detection AUC of 0.91 on DARPA Trace logs but requires 24--48 hours of clean pre-collection; \textbf{TraceCluster} \cite{tracecluster2026} achieves an average precision of 0.88 on multi-hop APT scenarios but uses a GNN trained on labeled subgraph clusters; \textbf{StageFinder} \cite{stagefinder2026} reports 94\% recall on staged APT campaigns but with a 12\% FPR under adversarial noise. In contrast, ZeroCausal requires zero labels, zero pre-collection, and achieves a user-configurable FPR target ($\leq 5\%$) through adaptive online conformal bounds.
+
+\subsection{Unsupervised and Reduced-Label Provenance IDS}
+To relax the labeling burden, several systems attempt unsupervised or self-supervised threat detection:
+\begin{itemize}
+\item \textbf{UNICORN} (2020) \cite{han2020unicorn} summarizes streaming provenance subgraphs as graph histograms and fits an unsupervised clustering baseline. However, it requires a clean, attack-free training period to define normal system execution clusters.
+\item \textbf{WATSON} (2020) \cite{gao2020watson} aggregates audit events and models behaviors using contextual semantics. While reducing manual modeling, it relies on static, clean offline profiles of normal execution and has no mechanism to adapt to concept-drift.
+\item \textbf{ShadeWatcher} (2022) \cite{yang2022shadewatcher} frames threat analysis as a recommendation task to flag anomalous edges. It requires a clean audit log baseline and leverages user feedback (labels) to guide its recommendation engine.
+\item \textbf{Kilo} (2022) \cite{kilo2022} utilizes self-supervised learning over provenance graphs to minimize label dependency, yet it still depends on an uncontaminated pre-collection phase for initial parameter fitting.
+\end{itemize}
+Unlike these approaches, ZeroCausal operates directly on raw, unlabeled, and potentially contaminated streams, using online conformal bounds and SCM change-point refitting to maintain false-alarm controls without pristine baselines.
+
+\subsection{Causal Anomaly Detection}
+Causal reasoning is increasingly applied to security. \textbf{Causal-IDS} (2026) \cite{causalids2026} models network flow log variables using static SCMs to identify intrusions as violations of causal mechanisms. While sharing our focus on causal violations, Causal-IDS differs fundamentally from ZeroCausal:
+\begin{itemize}
+\item \textbf{Network vs. Provenance}: Causal-IDS operates on network flow statistics (e.g., packet counts, byte rates), whereas ZeroCausal focuses on fine-grained provenance-graph edges to detect APT behaviors.
+\item \textbf{Benign Data Reliance}: Causal-IDS requires clean training logs to fit its initial SCM, whereas ZeroCausal learns online from unlabeled, potentially contaminated streams.
+\item \textbf{Thresholding}: Causal-IDS uses static, empirical thresholds, whereas ZeroCausal provides empirical FPR bounds via online conformal threshold adaptation.
+\end{itemize}
+
+Other systems, such as \textbf{CausalGraph} \cite{causalgraph2026}, rely on LLMs to perform causal reasoning over provenance subgraphs, which is computationally expensive and slow for real-time high-velocity logs.

@@ -1,0 +1,788 @@
+2026 IEEE International Conference on Consumer Electronics (ICCE)
+
+2026 IEEE International Conference on Consumer Electronics (ICCE) | 979-8-3315-5343-2/26/$31.00 ©2026 IEEE | DOI: 10.1109/ICCE67443.2026.11449614
+
+CausalGraph: When Causal Reasoning Meets Large
+Language Models for Intrusion Detection Systems
+Jean-Jarcke Mukombelwa Malasi, Student Member, IEEE, Hajar Moudoud, Member, IEEE,
+and Rokia Missaoui, Member, IEEE
+Department of Computer Science and Engineering, University of Quebec in Outaouais
+Gatineau, Quebec, Canada
+Emails: {malj30, hajar.moudoud, rokia.missaoui}@uqo.ca
+
+Combining causal reasoning with LLM assistance can therefore
+enable IDS that detect not only what happens, but also why it
+happens and which interventions are most effective.
+In this paper, we propose CausalGraph-IDS, a framework
+that integrates causal reasoning with LLM assistance to address
+key limitations of current IDS. Rather than asking only whether
+an event resembles known attacks, our approach asks a causal
+question: Would this alert persist if we intervened to remove
+its apparent cause? CausalGraph-IDS builds on an AttackChain Structural Model (ACSM), a temporally ordered causal
+representation of multi-stage attack progressions. We introduce
+two robustness measures: the Interventional Persistence Index
+(IPI) and the Counterfactual Detection Score (CDS), which
+quantify whether detected attack chains remain stable under
+realistic Security Operations Center (SOC) interventions. To
+support deployment, we apply Conformal Risk Control (CRC)
+to provide auditable guarantees on false-positive rates without
+assuming stationarity. Finally, we use LLMs strictly as assistive
+components through three modules: Large Language Modelbased Prior Induction (LLMPI) to extract causal priors from
+CTI, SACG to propose realistic counterfactual interventions,
+and CLJ to generate human-readable causal explanations.
+For confirmed alerts, the system outputs a Minimal BreakIntervention Set (MBIS), i.e., the smallest set of defensive
+actions needed to disrupt the inferred attack chain.
+The main contributions of this paper are:
+I. I NTRODUCTION
+• We propose CausalGraph-IDS, an intrusion detection
+Network Intrusion Detection Systems (IDSs) are a corframework that grounds alerts in an attack-chain structural
+nerstone of modern cybersecurity. However, as attack techcausal model (ACSM) rather than purely correlational
+niques become more sophisticated and multi-stage, traditional
+patterns.
+signature- and rule-based approaches struggle to adapt to novel
+• We introduce a detection principle based on persistence
+threats and capture long attack chains. Although learning-based
+under intervention, using the Interventional Persistence
+IDS (including deep models and Transformers) can improve
+Index (IPI) and Counterfactual Detection Score (CDS)
+benchmark performance, they remain largely correlational and
+to verify whether alerts remain stable under SOC-feasible
+sensitive to dataset bias and concept drift.
+counterfactual changes.
+Large Language Models (LLMs) have recently emerged as
+• We develop CHAIN-CRC, an end-to-end algorithm that
+powerful tools for security tasks such as CTI parsing and
+couples constrained causal graph learning, interventional
+rule synthesis. However, directly using LLMs as IDS decisionrobustness scoring, and Conformal Risk Control to provide
+makers raises concerns including hallucinations, prompt sensiexplicit and auditable false-positive guarantees.
+tivity, and the absence of calibration guarantees. Causal reason• We derive MBIS to map causal insights into minimal,
+ing offers a complementary perspective by explicitly modeling
+feasible defensive actions and report a drift-aware evalrelationships between events, attacker actions, and system states,
+uation protocol (ablation, calibration, and actionability
+enabling intervention-driven validation of detection hypotheses.
+metrics) showing improved robustness, interpretability,
+
+Abstract—Modern intrusion detection systems often achieve
+impressive benchmark accuracy yet fail in real-world deployment,
+where network behavior and attacker tactics continuously evolve.
+Under concept drift, decision boundaries learned offline can
+diverge from operational reality, triggering false-alarm cascades
+and creating detection blind spots that erode analyst trust. In
+this paper, we propose CausalGraph-IDS, a causal and languagemodel-assisted intrusion detection framework that moves beyond
+purely correlational scoring by explicitly verifying multi-stage
+attack chains. Additionally, we propose CHAIN-CRC, a unified
+algorithm that (i) learns a constrained attack-chain causal graph
+guided by knowledge-based priors derived from widely used
+adversary behavior taxonomies, (ii) computes robustness scores
+by testing whether alarms persist under feasible counterfactual
+security interventions, and (iii) applies conformal risk control to
+enforce operator-defined false-positive budgets with finite-sample
+guarantees.
+Generative models are integrated in strictly assistive roles
+through three modules: prior induction to distill causal constraints
+from unstructured threat reports, counterfactual generation to
+propose realistic and operationally feasible interventions, and
+causal logic justification to produce human-readable explanations
+grounded in the learned attack chain. Experiments on two
+widely used network intrusion detection benchmarks show that
+CausalGraph-IDS provides robust, explainable, and risk-governed
+detection, maintaining strong recall at low false-positive rates
+while delivering actionable causal insights for mitigation.
+Index Terms—Intrusion Detection, Causal Reasoning, LLMs,
+Conformal Risk Control, Generative AI, Concept Drift.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+979-8-3315-5343-2
+
+and operational usefulness over strong baselines.
+The remainder of this paper is organized as follows.
+Section II reviews related work. Section III presents the
+proposed causal and LLM-assisted framework. Section IV
+reports experimental results. Finally, Section V concludes the
+paper and discusses limitations and future work.
+II. R ELATED W ORK
+
+the chain level, it provides explicit and auditable false-positive
+guarantees aligned with SOC constraints.
+III. C AUSAL R EASONING FOR I NTRUSION D ETECTION
+S YSTEMS
+In this section, we describe the proposed CausalGraph-IDS
+pipeline, from telemetry to risk-controlled alerts. The framework combines an Attack-Chain Structural Model (ACSM),
+interventional robustness scores (IPI/CDS), assistive LLM/GAI
+modules, and Conformal Risk Control (CRC).
+
+Early learning-based IDS mainly relied on tabular classifiers
+like Logistic Regression, Support Vector Machines, Random
+Forests, and gradient-boosted trees trained on flow-level
+features. These approaches achieve strong pattern-recognition
+performance, but they are sensitive to dataset bias and concept
+A. Structural Causal Models in Cybersecurity
+drift and typically provide limited interpretability or operational
+guarantees [1], [2]. Most treat detection as a static supervisedWe build on Pearl’s Structural Causal Model (SCM) formallearning problem tied to fixed datasets, without explicit ism M = (X, U, F, G), where X denotes observed variables,
+reasoning about attack progression or intervention effects.
+U exogenous noise variables, G a directed acyclic graph (DAG),
+Recent deep learning and Transformer-based IDS aim to and F the structural equations that generate the data [9]. Intercapture non-linear feature interactions and longer-range depen- ventions of the form do(Xj = x) replace the corresponding
+dencies across flows and sessions [3]. Graph-based approaches mechanism in F , yielding interventional distributions that differ
+represent entities and communications as dynamic graphs and from conditional ones and enabling counterfactual reasoning
+apply graph neural networks to detect structural anomalies and across alternate ‘worlds.” In the intrusion-detection setting,
+coordinated attacks [4]. While these methods move toward an we employ temporally windowed representations to capture
+attack-chain perspective, they remain fundamentally correla- evolving multi-stage attack chains, and we resort to richer
+tional: alerts are driven by embedding scores without explicit graph variants when conjunctive dependencies arise (e.g., an
+intervention semantics, and calibration is often heuristic. As a Exploit stage requiring both Delivery and a privilege escalation
+result, behavior under counterfactual changes and distribution signal). Rather than focusing on effect sizes alone, our detector
+shifts remains difficult to audit.
+operationalizes persistence under intervention as a robustness
+LLMs have been adopted as security building blocks for CTI criterion: an alert is considered reliable only if the inferred
+normalization, malware triage, vulnerability analysis, and rule attack evidence remains detectable under a family of targeted,
+synthesis [5], [6]. For intrusion detection, LLMs have been SOC-feasible interventions on the causal representation.
+used to generate or generalize IDS rules and map CTI into
+ATT&CK-style semantics, but LLM-centric IDS designs can
+B. System Model
+suffer from opaque decision-making and lack formal guarantees
+on false positives.
+Figure 1 summarizes CausalGraph-IDS, a risk-governed IDS
+In parallel, conformal prediction and Conformal Risk Control that converts raw telemetry into causally grounded and action(CRC) provide principled tools to enforce deployment-time able alerts through six stages. (1) Telemetry ingestion: continuconstraints on risk metrics (e.g., false-positive rate) with ous collection of NetFlow, DNS, EDR, and authentication logs
+minimal distributional assumptions [7]. CRC has begun to provides host/session-level visibility. (2) Preprocessing and
+appear in anomaly detection and calibration pipelines, but eventization: logs are segmented into fixed windows, aligned
+typically without incorporating explicit attack chains or causal by host and session, and encoded into feature vectors x ∈ Rd
+interventions. Meanwhile, causal reasoning in cybersecurity has capturing behavioral signatures. (3) Attack-Chain Structural
+been explored to separate spurious from structural correlations Causal Model (ACSM): we learn a stage-wise DAG over canoniand to reason about defensive actions [8]. However, existing cal kill-chain phases S = {Recon, Delivery, Exploit, C2, Exfil}.
+efforts often address causal discovery or counterfactual analysis (4) Intervention-driven robustness: when suspicious activity
+in isolation, and do not integrate causal structure, intervention- is detected, a candidate subchain Gs ⊆ G is selected and
+based robustness, and risk-governed alerting into an end-to-end tested under SOC-feasible counterfactual interventions. (5) RiskSOC-ready IDS.
+controlled decision: Conformal Risk Control (CRC) enforces an
+CausalGraph-IDS bridges these lines through three key explicit false-positive budget δ with distribution-free guarantees.
+distinctions. First, unlike correlational IDS, it grounds detection (6) Actionable delivery: confirmed alerts are reported with
+in an attack-chain structural causal model and scores alerts a natural-language causal rationale and a Minimal Breakby interventional persistence. Second, unlike LLM-centric Intervention Set (MBIS). LLM modules are strictly assistive:
+approaches, it restricts LLMs to assistive functions (prior the causal model and CRC govern alerting decisions, while
+induction, plausible counterfactual proposal, and explanation), LLM outputs are used only to induce priors, propose plausible
+while alerting decisions and risk governance remain controlled interventions, and generate explanations aligned with MITRE
+by the causal model and CRC. Third, by applying CRC at ATT&CK semantics [10].
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+Counterfactual Detection Score (CDS) that captures the margin
+to τ :
+ 
+
+score(Gs , x(ι) ; θ) − τ
+CDS(Gs , x) = Eι∼I σ
+, (4)
+β
+where σ(·) is the logistic function and β > 0 is a temperature
+parameter. We use IPI as a robustness gate (IPI ≥ γ) and CDS
+for ranking and for stable calibration when scores concentrate
+near τ .
+D. Risk-Governed Deployment via Conformal Risk Control
+We enforce an explicit false-positive budget δ using Conformal Risk Control (CRC) under an exchangeability assumption [11]. Let y ∈ {0, 1} denote benign/attack and define the
+false-alert risk for a decision a ∈ {benign, alert} as:
+r(a, y) = 1{a = alert ∧ y = 0}.
+a) Calibration.: On a calibration set Dcal
+{(xi , yi )}ni=1 , we compute benign calibration scores
+Fig. 1: Overview of the CausalGraph-IDS architecture. The
+pipeline processes telemetry through stages of ingestion,
+eventization, causal graph learning (ACSM), interventionbased robustness scoring, risk-controlled decision (CRC), and
+actionable alert delivery with MBIS and explanations.
+
+C. Interventional Persistence Index (IPI) and Counterfactual
+Detection Score (CDS)
+Given a suspicious subchain Gs ⊆ G and a scalar detector
+score score(Gs , x; θ) ∈ [0, 1], we evaluate robustness under a
+catalog I of SOC-feasible interventions. We implement each
+intervention ι ∈ I as a plausible feature edit on the window
+representation:
+x(ι) = Apply(x, ι),
+
+ci = CDS(Gs,i , xi )
+
+for yi = 0,
+
+(5)
+=
+(6)
+
+and set the operational threshold to the (1 − δ) quantile of
+benign scores:
+
+
+t(1−δ)
+= Quantile1−δ {ci : yi = 0} .
+(7)
+neg
+b) Deployment rule.: At deployment time, we issue an
+alert only if (i) a suspicious subchain exists, (ii) it is robust
+under interventions, and (iii) it exceeds the CRC operating
+threshold:
+
+πδ (x) =
+
+
+
+alert,
+
+
+
+benign,
+
+if Gs ̸= ∅ ∧ IPI(Gs , x) ≥ γ
+∧ CDS(Gs , x) ≥ t(1−δ)
+,
+neg
+otherwise.
+
+(1)
+
+(8)
+
+Algorithm 1 describes the end-to-end CHAIN-CRC detection
+loop. The telemetry stream T is first converted into windowed
+constrained by operational policies and plausibility invariants feature vectors X by E VENTIZE A ND E NCODE, where each
+(e.g., protocol-port consistency, bounded rate changes).
+incoming window x ∈ Rd summarizes host/session behavior
+a) IPI (binary persistence).: We define the Interventional over a fixed time interval. The CTI corpus K is processed
+Persistence Index as the probability that the subchain remains by LLM_P RIOR I NDUCTION to extract causal constraints:
+above a decision threshold τ under interventions:
+allowed edges Eallow , forbidden edges Edeny , and a stage partial
+h
+i
+order π that guide causal discovery. Using these constraints,
+IPI(Gs , x) = Eι∼I 1{score(Gs , x(ι) ; θ) ≥ τ } .
+(2) L EARNACSM learns the attack-chain causal graph parameters
+(W ⋆ , θ⋆ ) (graph structure and scoring parameters). DeploymentIn practice, we approximate IPI via Monte Carlo sampling time calibration then computes the CRC operating threshold
+(1−δ)
+with K interventions {ιk }K
+k=1 :
+tneg on the calibration set Dcal to satisfy the target falsepositive budget δ. For each new window x, S ELECT S USPI K
+1 X
+(ιk )
+c
+IPI(Gs , x) =
+1{score(Gs , x ; θ) ≥ τ }.
+(3) CIOUS S UBCHAIN identifies a candidate subchain Gs , which
+K
+if non-empty, robustness is evaluated under an intervention
+k=1
+catalog I by estimating the Interventional Persistence Index
+High IPI indicates that evidence for the inferred chain persists IPI (fraction of interventions for which the score remains
+under realistic SOC actions, while low IPI suggests brittle, above τ ) and the Counterfactual Detection Score CDS (marginintervention-sensitive correlations.
+aware persistence). An alert is triggered only if both robustness
+(1−δ)
+b) CDS (margin-aware persistence).: IPI is binary gates are satisfied, i.e., IPI ≥ γ and CDS ≥ tneg . When
+(above/below τ ) and can be insensitive when scores fluctuate triggered, F IND M IN B REAK S ET computes the Minimal Breaknear the threshold. We therefore introduce a continuous Intervention Set (MBIS), and CLJ_E XPLAIN produces a
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+Algorithm 1 CHAIN-CRC: CausalGraph-IDS Detection
+Pipeline
+
+TABLE I: Representative examples of LLM assistance artifacts
+(qualitative).
+
+Require: Telemetry stream T , CTI corpus K, calibration set
+Module
+Example output (illustrative)
+Dcal , intervention catalog I
+LLMPI (priors)
+Allow edges: (Delivery → Exploit), (Exploit →
+Ensure: Risk-controlled alerts with MBIS and explanations
+C2); Deny edges: (Recon → Exfil); Stage order:
+Recon ≺ Delivery ≺ Exploit ≺ C2 ≺ Exfil
+1: X ← E VENTIZE A ND E NCODE(T )
+2: (Eallow , Edeny , π) ← LLM_P RIOR I NDUCTION (K)
+SACG
+do(port ∈ {80, 443}), do(privilege = 0),
+(interventions)
+do(burstiness = baseline), with plausibility checks
+3: (W ⋆ , θ ⋆ ) ← L EARNACSM(X, Eallow , Edeny , π)
+(protocol/port consistency, bounded rate changes)
+(1−δ)
+⋆ ⋆
+4: tneg
+← CRC_C ALIBRATE(Dcal , W , θ , I)
+CLJ (explanation)
+‘The alert is robust: IPI = 0.92 and high CDS
+5: A ← ∅
+▷ Alert set
+indicate persistence under port normalization and
+6: for each new window x do
+privilege revocation. MBIS suggests revoking elevated privileges and blocking C2 on uncommon
+7:
+Gs ← S ELECT S USPICIOUS S UBCHAIN(x, W ⋆ , θ⋆ )
+ports, which breaks the Exploit→C2 link.”
+8:
+if Gs ̸= ∅ then
+⋆
+9:
+IPI ← E STIMATE IPI(Gs , x, I, τ, θ )
+10:
+CDS ← E STIMATE CDS(Gs , x, I, τ, s, θ⋆ )
+(1−δ)
+G. Hypotheses on LLM-Guided Causal Priors
+11:
+if IPI ≥ γ and CDS ≥ tneg then
+⋆
+12:
+MBIS ← F IND M IN B REAK S ET(Gs , x, I, τ, θ )
+We articulate the role of LLMPI through testable hypotheses:
+13:
+Rationale ← CLJ_E XPLAIN(Gs , IPI, MBIS)
+• H1 (Structural alignment). LLM-parsed CTI can extract
+14:
+A ← A ∪ {(x, Gs , IPI, MBIS, Rationale)}
+plausible stage orderings and allow/deny edge priors
+15:
+A LERTA NALYST(x, Gs , IPI, MBIS, Rationale)
+that reduce spurious arcs in the learned ACSM without
+16:
+end if
+degrading detection performance.
+17:
+end if
+• H2 (Operational robustness). ATT&CK-guided constraints
+18: end for
+improve robustness under strict false-positive budgets,
+19: return A
+increasing TPR@1%FPR and persistence (IPI/CDS) compared to a purely data-driven SCM.
+• H3 (Consistency and calibration). CLJ explanations
+human-readable rationale linking Gs , IPI, and MBIS. The
+aligned with ATT&CK semantics can be provided without
+algorithm outputs the alert set A, where each alert contains
+harming calibration (low ECE) or overall detection quality
+the window identifier, the detected subchain, robustness scores,
+(high F1).
+MBIS, and the explanation.
+These hypotheses translate the intuition behind LLMPI into
+measurable claims on structural validity, operational reliability,
+E. Assistive LLM and Generative Modules
+and interpretability.
+LLMs are used in non-decision roles to increase structure,
+plausibility, and interpretability without the final alert control:
+IV. E XPERIMENTAL E VALUATION
+•
+
+LLMPI (Prior Induction) parses CTI and ATT&CK
+descriptions [10] to extract edge priors (Eallow , Edeny ) and
+a partial order π over stages.
+SACG (Counterfactual Generation) proposes SOC-feasible
+interventions (e.g., port normalization, privilege revocation,
+rate limiting) consistent with policy constraints.
+CLJ (Causal Logic Justification) produces concise analystfacing rationales that link the activated subchain Gs ,
+robustness scores (IPI/CDS), and MBIS to ATT&CK
+tactics and techniques.
+
+A. Experimental Setup
+
+We evaluate CausalGraph-IDS on two widely used NIDS
+benchmarks:
+CICIDS2017, containing enterprise-like traffic
+•
+and attacks (DoS, brute-force, etc.) [12], and UNSW-NB15,
+featuring diverse modern attacks (Fuzzers, Backdoors, etc.)
+generated with IXIA PerfectStorm [13]. For both datasets, we
+•
+remove redundant attributes, encode categorical fields, and zscore normalize continuous features. We use a stratified 80/20
+train/test split.
+a) Baselines.: We compare CausalGraph-IDS against
+This design follows the emerging trend of using LLMs as
+well-established tabular and deep baselines: Logistic Regressecurity copilots in SOC workflows, while keeping alerting
+sion (LR), Random Forest (RF), XGBoost (XGB), and a
+and risk guarantees governed by the causal model and CRC.
+Transformer-based IDS (TrIDS). All models are tuned on a
+held-out validation split.
+F. Qualitative Examples of LLM Assistance
+b) Evaluation metrics.: We report the Area Under the
+Table I illustrates representative examples of the three LLM- ROC Curve (AUROC) and Area Under the Precision-Recall
+assisted modules: (i) LLMPI extracting ATT&CK-aligned struc- Curve (AUPRC) to summarize discrimination across thresholds.
+tural priors, (ii) SACG proposing SOC-feasible counterfactual We report discrimination, low-false-alarm operating perforinterventions, and (iii) CLJ producing analyst-facing causal mance, and calibration. In addition, we report two operational
+explanations.
+metrics tailored to actionable defense.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+(i) TPR@1%FPR. This is the true positive rate at the largest
+decision threshold whose false positive rate does not exceed
+1%. Let TP(τ ), FP(τ ), TN(τ ), and FN(τ ) be the confusionmatrix counts at threshold τ :
+
+
+FP(τ )
+∗
+τ = max τ
+≤ 0.01 ,
+(9)
+FP(τ ) + TN(τ )
+TPR@1%FPR =
+
+TP(τ ∗ )
+.
+TP(τ ∗ ) + FN(τ ∗ )
+
+(10)
+
+(ii) Expected Calibration Error (ECE). We compute ECE
+with M confidence bins. For bin Bm , let acc(Bm ) be empirical
+accuracy and conf(Bm ) the average predicted confidence:
+ECE =
+
+M
+X
+|Bm |
+|acc(Bm ) − conf(Bm )| .
+N
+m=1
+
+(11)
+
+Lower ECE indicates better probabilistic calibration.
+(iii) Security Score. To summarize low-FPR detection quality
+in a single [0, 1] value, we use:
+
+Fig. 2: ROC curve evaluation on UNSW-NB15
+
+1
+(F1 + TPR@1%FPR) .
+(12)
+2
+This favors detectors that are simultaneously accurate and
+effective at strict false-alarm constraints.
+(iv) Actionability Score. Let MBIS(x) denote the Minimal
+Break-Intervention Set suggested for alert x (smaller is better),
+and let K be the size of the intervention library used by the
+system. We define:
+
+
+|MBIS(x)|
+,1 ,
+(13)
+Actionability(x) = 1 − min
+K
+
+a strong precision-recall balance (Prec.=0.9952, Rec.=0.9955)
+and maintains a high TPR@1%FPR (0.9970). Figure 2 reports
+ROC curves for both datasets.
+On CICIDS2017, several ablations share the same deployment policy (default persistence gate γ and strict CRC
+calibration at 1% FPR), which can yield identical alert decisions
+and thus identical metrics up to rounding. The full system
+additionally uses the complete policy (including tuned γ),
+explaining the performance jump.
+On CICIDS2017, all models achieve near-ceiling AUROC/AUPRC. In this regime, the primary differentiator becomes low-FPR operating behavior and calibration.
+CausalGraph-IDS achieves the best overall trade-off, with
+the highest F1 (0.9945), the strongest low-FPR detection
+(TPR@1%FPR=0.997), and the lowest ECE (0.0029), which
+is important for risk-aware alerting.
+On UNSW-NB15, tree ensembles (RF/XGB) reach nearperfect discrimination. CausalGraph-IDS remains competitive
+(AUROC=0.9995, AUPRC=0.9996) while providing an operationally meaningful output: causally grounded alert stability,
+calibrated low-FPR control, and actionable mitigation cues.
+Compared with LR and TrIDS, it improves the low-FPR
+operating point substantially (TPR@1%FPR=0.9970 vs 0.7866
+and 0.9008) and yields better calibration (ECE=0.0028 vs
+0.0245 and 0.0099).
+CICIDS2017 shows a near-saturated operating regime under
+our strict 1% FPR constraint. Across several ablation variants,
+the negative-score tail becomes extremely concentrated, causing
+CRC to select a threshold close to 1.0. When τ ∗ is saturated,
+multiple variants can yield identical alert decisions. In contrast,
+the full system jointly changes the score distribution through
+the combination of ATT&CK-informed priors (LLMPI) and
+counterfactual exposure (SACG), which widens separation at
+the negative tail and prevents threshold saturation, producing
+the observed gains.
+Our results highlight that operating-point control is as
+
+SecurityScore =
+
+and report the dataset-level mean actionability over all truepositive alerts. This rewards actionable alerts that can be
+mitigated with minimal operational disruption.
+TABLE II: Ablation study of CausalGraph-IDS on UNSWNB15 and CICIDS2017.
+Variant
+
+F1
+
+Prec.
+
+Rec.
+
+TPR@1%FPR
+
+0.9972
+0.9979
+0.9975
+0.9917
+0.9955
+
+0.9951
+0.9975
+0.9978
+0.9960
+0.9970
+
+0.9234
+0.9234
+0.9234
+0.9234
+0.9910
+
+0.9314
+0.9315
+0.9315
+0.9315
+0.9970
+
+UNSW-NB15
+Base (no LLM)
++ SACG + CRC
++ LLMPI + SACG
++ LLMPI + CRC
+Full System
+
+0.9924
+0.9942
+0.9952
+0.9934
+0.9934
+
+Base (no LLM)
++ SACG + CRC
++ LLMPI + CRC
++ LLMPI + SACG
+Full System
+
+0.9582
+0.9582
+0.9582
+0.9582
+0.9943
+
+0.9875
+0.9906
+0.9929
+0.9951
+0.9952
+
+CICIDS2017
+0.9958
+0.9958
+0.9958
+0.9958
+0.9980
+
+On UNSW-NB15, incorporating ATT&CK-aligned priors
+(LLMPI) and causal-graph reasoning (SACG) improves performance at a strict operating point: TPR@1%FPR increases from
+0.9951 (Base) to 0.9978 (+LLMPI+SACG), while maintaining
+high F1. Adding CRC improves low-false-alarm robustness by
+calibrating the decision threshold. The full system preserves
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+TABLE III: Performance comparison on CICIDS2017 and UNSW-NB15 (some ablation deltas are below 10−4 ).
+Dataset
+
+Model
+
+AUROC
+
+AUPRC
+
+F1
+
+Precision
+
+Recall
+
+TPR@1%FPR
+
+ECE
+
+CICIDS2017
+
+LR
+RF
+XGB
+TrIDS
+CGIDS (ours)
+
+0.9992
+0.9996
+0.9998
+0.9993
+0.9998
+
+0.9982
+0.9989
+0.9995
+0.9988
+0.9996
+
+0.9905
+0.9837
+0.9873
+0.9894
+0.9945
+
+0.9920
+0.9980
+0.9980
+0.9980
+0.9980
+
+0.989
+0.970
+0.977
+0.981
+0.991
+
+0.992
+0.992
+0.997
+0.995
+0.997
+
+0.0063
+0.0666
+0.0069
+0.0075
+0.0029
+
+UNSW-NB15
+
+LR
+RF
+XGB
+TrIDS
+CGIDS (ours)
+
+0.9860
+1.0000
+1.0000
+0.9962
+0.9995
+
+0.9880
+1.0000
+1.0000
+0.9966
+0.9996
+
+0.9449
+0.9993
+0.9998
+0.9770
+0.9934
+
+0.9481
+0.9986
+0.9997
+0.9767
+0.9952
+
+0.9418
+1.0000
+1.0000
+0.9773
+0.9955
+
+0.7866
+1.0000
+1.0000
+0.9008
+0.9970
+
+0.0245
+0.0110
+0.0004
+0.0099
+0.0028
+
+important as raw discrimination. On UNSW-NB15, LLMPI
+and SACG improve robustness under strict false-positive
+constraints by stabilizing the ACSM structure and evaluating
+persistence under realistic interventions. CRC further enforces
+a deployment-time risk budget, making the detector behavior
+auditable for SOC use. IPI and CDS play complementary roles:
+IPI acts as a robustness gate (filtering superficial correlations),
+while CDS provides a smooth robustness score enabling stable
+ranking and calibration.
+B. Discussion: Operational Interpretation
+Our results highlight that operating-point control is as
+important as raw discrimination. On UNSW-NB15, LLMPI
+and SACG improve robustness under strict false-positive
+constraints by stabilizing the ACSM structure (ATT&CKaligned priors) and by evaluating persistence under realistic
+interventions, which improves TPR@1%FPR. CRC further
+enforces a deployment-time risk budget, making the detector
+behavior auditable for SOC use.
+The dataset CICIDS2017 is highly separable under the
+chosen feature representation, and many models reach nearperfect AUROC/AUPRC. At the strict 1% FPR operating point,
+CRC calibration can saturate the threshold, and when ablations
+share the same persistence gate, the resulting decision policy
+can become identical across variants. The Full System uses
+the complete pipeline and a tuned persistence gate, shifting
+the operating point and recovering additional true positives
+while maintaining a very low false-positive rate. Finally, IPI
+and CDS play complementary roles: IPI acts as a robustness
+gate (filtering superficial correlations), while CDS provides a
+smooth robustness score enabling stable ranking and calibration,
+particularly when scores concentrate near the threshold.
+V. C ONCLUSION
+We introduced CausalGraph-IDS, a novel intrusion detection
+framework that integrates causal reasoning with LLMs to
+address key limitations in traditional IDS. By replacing purely
+correlational scoring with causal verification of attack chains,
+our framework provides a more robust and interpretable
+approach to intrusion detection. Through the introduction of the
+IPI and CDS, we enable the framework to assess the stability
+of detected attack chains under feasible security interventions.
+Additionally, the integration of CRC ensures that the framework
+
+adheres to predefined false-positive budgets, making it suitable
+for real-world deployment. Our evaluation results show that
+CausalGraph-IDS outperforms state-of-the-art models in terms
+of detection performance, interpretability, and risk control.
+Future work includes supporting streaming deployment
+with periodic CRC recalibration, validating the approach on
+live SOC telemetry, extending CHAIN-CRC to multi-stage
+Advanced Persistent Threat scenarios, and integrating domainadapted LLMs for higher-quality CTI priors. We will also
+study robustness against adaptive attackers targeting the learned
+causal structure and investigate integration into SIEM/SOAR
+workflows with analyst-in-the-loop evaluation.
+R EFERENCES
+[1] S. Mahdavifar and A. A. Ghorbani, “Application of deep learning to
+cybersecurity: A survey,” Neurocomputing, vol. 347, pp. 149–176, 2019.
+[2] J. Yu, A. V. Shvetsov, and S. H. Alsamhi, “Leveraging machine learning
+for cybersecurity resilience in industry 4.0: Challenges and future
+directions,” IEEE access, 2024.
+[3] F. Ullah, S. Ullah, G. Srivastava, and J. C.-W. Lin, “Ids-int: Intrusion
+detection system using transformer-based transfer learning for imbalanced
+network traffic,” Digital Communications and Networks, vol. 10, no. 1,
+pp. 190–204, 2024.
+[4] Y. Zhong et al., “A survey on graph neural networks for intrusion
+detection systems,” IEEE Transactions on Information Forensics and
+Security, vol. 19, pp. 1–15, 2024.
+[5] Y. Yao, J. Duan, K. Xu, Y. Cai, Z. Sun, and Y. Zhang, “A survey on
+large language model (llm) security and privacy: The good, the bad, and
+the ugly,” High-Confidence Computing, vol. 4, no. 2, p. 100211, 2024.
+[6] M. A. Ferrag, F. Alwahedi, A. Battah, B. Cherif, A. Mechri, N. Tihanyi,
+T. Bisztray, and M. Debbah, “Generative ai in cybersecurity: A comprehensive review of llm applications and vulnerabilities,” Internet of
+Things and Cyber-Physical Systems, vol. 5, pp. 1–46, 2025.
+[7] V. Blot, A. N. Angelopoulos, M. I. Jordan, and N. J.-B. Brunel,
+“Automatically adaptive conformal risk control,” 2025. [Online].
+Available: https://arxiv.org/abs/2406.17819
+[8] Y. Zeng et al., “Causal reasoning for ddos attack detection,” Computers
+& Security, vol. 120, p. 102791, 2022.
+[9] J. Pearl, Causality: Models, Reasoning, and Inference, 2nd ed. Cambridge University Press, 2009.
+[10] MITRE, “MITRE ATT&CK®: Adversary Tactics and Techniques,”
+2015–2025. [Online]. Available: https://attack.mitre.org/
+[11] A. N. Angelopoulos, S. Bates, A. Fisch, L. Lei, and T. Schuster,
+“Conformal risk control,” in The Twelfth International Conference
+on Learning Representations, 2024. [Online]. Available: https:
+//openreview.net/forum?id=33XGfHLtZg
+[12] I. Sharafaldin, A. H. Lashkari, and A. A. Ghorbani, “Toward generating a
+new intrusion detection dataset and intrusion traffic characterization,” in
+Proceedings of the 4th International Conference on Information Systems
+Security and Privacy (ICISSP), 2018.
+[13] N. Moustafa and J. Slay, “Unsw-nb15: A comprehensive data set for
+network intrusion detection systems,” in 2015 Military Communications
+and Information Systems Conference (MilCIS), 2015.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:52:36 UTC from IEEE Xplore. Restrictions apply.
+
+

@@ -1,0 +1,42 @@
+% ============================================================================
+% Abstract
+% ============================================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Modern provenance-based Intrusion Detection Systems (IDS) for detecting Advanced Persistent
+Threats (APTs) share a critical deployment bottleneck: they require curated, pristine benign
+training data to build normal behavioral profiles. In real-world enterprise environments, this
+clean-data assumption fails due to stealthy attacker contamination, constant concept drift, and
+prohibitive manual labeling costs.
+
+This thesis presents \textbf{Causal Behavioral State Reasoning (CBSR)}, a provenance-based IDS
+framework that infers latent cyber risk directly from uncurated, unlabeled streaming logs without
+any clean-baseline collection period. CBSR projects raw system audit telemetry into a formal
+12-dimensional \emph{Behavioral State Space} using online Structural Causal Models (SCMs)
+discovered from potentially contaminated streams via RobustParCorr. Within this state space,
+system dynamics are analyzed in parallel by three reasoning operators: (i) \emph{Local State
+Reasoning} ($R_L$) that measures instantaneous causal mechanism violations; (ii) \emph{Temporal
+State Reasoning} ($R_T$) that captures multi-stage attack progression via an LSTM sequence
+model; and (iii) \emph{Behavioral State Reasoning} ($R_B$) that classifies complex attack
+manifolds using a Behavioral Pattern Reasoner trained on sparse validation labels. Their outputs
+are fused by a stacked meta-learner and calibrated with online split conformal prediction for
+distribution-free false-alarm control under concept drift.
+
+Novel contributions include: (1) a formal 12-dimensional causal Behavioral State Space grounded
+in five invariant coordinate groups derived from online SCM outputs; (2) a Causal Intervention
+Score (CIS) rooted in graph boundary theory that quantifies multi-hop attack propagation versus
+localized administrative noise; and (3) a multi-perspective parallel reasoning architecture
+that resolves the model-mismatch failures of pure causal detectors.
+
+Evaluated on five diverse benchmarks, CBSR achieves AUC of \textbf{0.9628} on real enterprise
+Windows logs (DARPA OpTC), AUC \textbf{1.0000} on Linux host telemetry (BETH), and AUC
+\textbf{1.0000} on simulated multi-stage APT campaigns (TC3, NODLINK). On the challenging
+heterogeneous StreamSpot benchmark, the framework improves AUC from 0.4991 to \textbf{0.6909}.
+Conformal calibration holds empirical false alarm rates within 1.78\%--6.13\% at a 5\% FPR
+budget, and a 13$\times$ runtime speedup confirms streaming deployment readiness.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} Intrusion Detection, Advanced Persistent Threats, Causal Discovery,
+Behavioral State Space, Conformal Prediction, Provenance Graphs, Structural Causal Models,
+Zero-Label Detection

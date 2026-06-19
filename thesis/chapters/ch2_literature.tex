@@ -1,0 +1,132 @@
+% ============================================================================
+% Chapter 2: Literature Review & Background
+% ============================================================================
+\chapter{Background and Related Work}
+\label{ch:literature}
+
+This chapter reviews the research landscape relevant to CBSR across three areas: provenance-based
+intrusion detection, causal anomaly detection methods, and conformal prediction. We conclude with
+a research gap analysis that motivates our contributions.
+
+\section{Provenance-Based Intrusion Detection Systems}
+
+Provenance graphs represent system history by capturing relationships between system entities
+(processes, files, network sockets) as directed edges. Each edge encodes an operation such as
+\texttt{PROCESS:chrome.exe $\to$ READS\_FILE $\to$ FILE:History}, preserving the complete causal
+lineage of system execution.
+
+\subsection{Supervised and Semi-Supervised Approaches}
+
+\textbf{OCR-APT}~\cite{ocrapt2025} reconstructs APT attack stories from audit logs using subgraph
+anomaly detection combined with LLMs. It reports AUC of 0.91 on DARPA Trace logs but requires
+24--48 hours of clean pre-collection to establish a benign baseline.
+
+\textbf{TraceCluster}~\cite{tracecluster2026} proposes a lightweight clustering-based subgraph
+attention network for APT detection, achieving average precision of 0.88 on multi-hop APT
+scenarios. Its GNN is trained on labeled subgraph clusters---requiring labeled examples.
+
+\textbf{StageFinder}~\cite{stagefinder2026} learns temporal reasoning over provenance data for
+attack stage estimation, reporting 94\% recall on staged APT campaigns but requiring labeled
+attack stage annotations.
+
+\subsection{Unsupervised and Reduced-Label Approaches}
+
+\textbf{UNICORN}~\cite{han2020unicorn} (NDSS 2020) summarizes streaming provenance subgraphs as
+graph histograms and fits an unsupervised clustering baseline. It reduces the label dependency but
+still requires a \emph{clean, attack-free} training period to define normal cluster centroids.
+
+\textbf{WATSON}~\cite{gao2020watson} (CCS 2020) aggregates audit events using contextual
+semantics but relies on static, clean offline profiles with no mechanism to adapt to concept drift.
+
+\textbf{ShadeWatcher}~\cite{yang2022shadewatcher} (S\&P 2022) frames threat analysis as a
+recommendation task. It requires a clean audit log baseline and leverages user feedback (labels)
+for guidance.
+
+\textbf{Kairos}~\cite{cheng2024kairos} utilizes self-supervised learning over provenance graphs
+to minimize label dependency, yet still depends on an uncontaminated pre-collection phase for
+initial parameter fitting.
+
+\subsection{Critical Assessment}
+
+Table~\ref{tab:lit_requirements} summarizes the deployment requirements of existing
+provenance-based IDS. A clear pattern emerges: \emph{every existing system} requires some form of
+clean baseline data. This shared assumption creates a systemic vulnerability.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Capability comparison of provenance IDS methods. ``Clean Baseline'' requires a clean,
+attack-free pre-collection period; ``FPR Guarantee'' provides a formal bound on false alarm rate.}
+\begin{tabularx}{\linewidth}{Xcccc}
+\hline
+\rowcolor[gray]{0.88}
+\textbf{Method} & \textbf{Clean Base.} & \textbf{Drift Adapt.} & \textbf{Causal} & \textbf{FPR Guar.} \\
+\hline
+OCR-APT~\cite{ocrapt2025}       & Yes (48h) & No  & No  & No  \\
+TraceCluster~\cite{tracecluster2026} & Yes  & No  & No  & No  \\
+StageFinder~\cite{stagefinder2026}   & Yes  & No  & No  & No  \\
+Kairos~\cite{cheng2024kairos}        & Yes  & No  & No  & No  \\
+UNICORN~\cite{han2020unicorn}         & Yes  & No  & No  & No  \\
+Causal-IDS~\cite{causalids2026}       & Yes  & No  & Yes & No  \\
+\textbf{CBSR (Ours)}                  & \textbf{No} & \textbf{Yes} & \textbf{Yes} & \textbf{Yes} \\
+\hline
+\end{tabularx}
+\label{tab:lit_requirements}
+\end{table}
+
+
+\section{Causal Anomaly Detection}
+
+Causal reasoning is increasingly applied to cybersecurity, motivated by the insight that causal
+relationships are more robust to distributional shifts than statistical correlations.
+
+\textbf{Causal-IDS}~\cite{causalids2026} (ICOIN 2026) is the closest prior work. It models
+network flow log variables using static Structural Causal Models (SCMs) to identify intrusions as
+violations of learned causal mechanisms. However, it differs from CBSR in three fundamental ways:
+(1) it operates on coarse-grained network flow statistics rather than fine-grained provenance
+edges; (2) it requires clean training logs; and (3) it uses fixed empirical thresholds with no
+drift adaptation or FPR control.
+
+\textbf{CausalGraph}~\cite{causalgraph2026} (ICCE 2026) integrates causal reasoning with LLMs for
+intrusion detection. While offering superior interpretability, the computational cost of LLM
+inference makes it impractical for real-time, high-velocity streaming logs.
+
+\textbf{LiNGAM-SF}~\cite{lingamsf2025} (IEEE TNNLS 2025) proposes causal structural learning with
+Linear Non-Gaussian Acyclic Models for streaming features. Its key insight---distinguishing latent
+confounders from direct mechanism violations---informs the design of CBSR's behavioral state
+coordinates.
+
+
+\section{Conformal Prediction}
+
+Conformal prediction~\cite{shafer2008, vovk2005algorithmic} provides a distribution-free
+framework for constructing prediction sets with guaranteed coverage probabilities. Under the sole
+assumption of exchangeability, the conformal p-value for a new test score $S_t$ against a
+calibration set $\{s_1, \ldots, s_M\}$ is:
+\begin{equation}
+\text{conf\_pval}(S_t) = \frac{|\{i : s_i \geq S_t\}| + 1}{M + 1}
+\end{equation}
+This guarantees $\Pr(\text{false alarm}) \leq \alpha$ for any single test point. In streaming
+security telemetry, exchangeability is violated by concept drift. CBSR adopts online threshold
+adaptation~\cite{barber2023conformal, angelopoulos2021gentle} combined with change-point-triggered
+queue flushing to restore localized exchangeability after drift events.
+
+
+\section{Research Gap Analysis}
+
+Based on the literature review, we identify four critical gaps that no existing system addresses
+simultaneously:
+
+\begin{enumerate}
+\item \textbf{Zero-label causal IDS for provenance graphs}: No existing system combines causal
+    mechanism violation detection with provenance-graph analysis without requiring labels or clean
+    data.
+\item \textbf{Online SCM adaptation}: Existing causal IDS use static SCMs with no mechanism for
+    concept drift recovery.
+\item \textbf{Provable false alarm control}: No provenance-based IDS provides statistical
+    guarantees on false alarm rates.
+\item \textbf{Multi-perspective behavioral state reasoning}: No prior work fuses causal,
+    temporal, and behavioral perspectives on a shared formal state representation.
+\end{enumerate}
+
+CBSR addresses all four gaps simultaneously.

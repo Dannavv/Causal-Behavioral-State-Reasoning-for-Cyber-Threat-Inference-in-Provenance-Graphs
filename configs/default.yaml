@@ -1,0 +1,21 @@
+# ZeroCausal Default Configuration
+# Target: DARPA TC3 and NODLINK
+
+pcmci_alpha: 0.01
+std_floor: 1.0
+
+# Hybrid Anomaly Scorer (CAS) parameters
+a_p: 0.1
+b_p: 5.0
+a_r: 5.0
+b_r: 0.1
+
+# Conformal Calibrator parameters
+target_fpr: 0.05
+conformal_lr: 0.05
+conformal_alpha_init: 0.05
+
+# Adaptive Window (Change-point) Detector parameters
+detector_short: 10
+detector_long: 50
+detector_threshold: 4.0

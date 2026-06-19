@@ -1,0 +1,2273 @@
+GraSP: Graph-Structured Skill Compositions for LLM Agents
+Tianle Xia∗ , Lingxiang Hu, Yiding Sun, Ming Xu
+Lan Xu† , Siying Wang, Wei Xu, Jie Jiang
+Tencent
+{tianlexia,lingxianghu,emanuelsun,flemingxu}@tencent.com
+{lanxu,siyingwang,davidxu,zeus}@tencent.com
+∗
+
+First author.
+
+†
+
+Corresponding author.
+
+Abstract
+
+amortize successful strategies across episodes. By
+operating at the skill level rather than the token
+level, these agents reduce inference costs and improve consistency on tasks that share common
+subgoal structures.
+Skill availability is no longer the bottleneck.
+Recent infrastructure efforts have produced largescale skill repositories with rich relational metadata, and community ecosystems continue to grow
+rapidly. Yet a recent large-scale benchmark reveals a counter-intuitive finding: providing agents
+with more skills does not monotonically improve
+performance. Tasks augmented with 2–3 focused skills show the largest gains, while 4+ skills
+yield diminishing returns, and comprehensive documentation actually hurts performance. This “less
+is more” phenomenon exposes a deeper issue: the
+bottleneck has shifted from skill availability to
+skill orchestration.
+Current skill-based agents treat this orchestration problem trivially—retrieved skills are fed into
+the agent as a flat context list or executed as a sequential trajectory. This design suffers from two
+fundamental limitations. First, it creates cognitive overload: dumping all retrieved skills into
+the prompt consumes context budget without providing an actionable execution path, forcing the
+LLM to implicitly reason about which skills to
+apply, in what order, and under what conditions.
+As task complexity grows, this implicit reasoning
+becomes unreliable. Second, flat execution discards causal structure: each skill’s preconditions,
+effects, and dependencies on other skills are lost
+after retrieval, so the agent cannot distinguish a
+failure that invalidates one downstream step from
+one that invalidates all of them. A failure at step k
+in a flat trajectory of N skills forces O(N ) replanning, even when the true causal impact is local.
+The root cause is the absence of a compilation
+stage between skill retrieval and skill execution.
+Retrieval answers “what skills are relevant”; exe-
+
+arXiv:2604.17870v1 [cs.CL] 20 Apr 2026
+
+Skill ecosystems for LLM agents have matured rapidly, yet recent benchmarks show
+that providing agents with more skills does
+not monotonically improve performance—
+focused sets of 2–3 skills outperform comprehensive documentation, and excessive skills
+actually hurt. The bottleneck has shifted from
+skill availability to skill orchestration: agents
+need not more skills, but a structural mechanism to select, compose, and execute them
+with explicit causal dependencies. We propose GraSP (G RA SP), the first executable
+skill graph architecture that introduces a compilation layer between skill retrieval and execution. G RA SP transforms flat skill sets into
+typed directed acyclic graphs (DAGs) with
+precondition–effect edges, executes them with
+node-level verification, and performs localitybounded repair through five typed operators—
+reducing replanning from O(N ) to O(dh ).
+Across ALFWorld, ScienceWorld, WebShop,
+and InterCode with eight LLM backbones,
+G RA SP outperforms ReAct, Reflexion, ExpeL, and flat skill baselines in every configuration, improving reward by up to +19 points
+over the strongest baseline while cutting environment steps by up to 41%. G RA SP’s advantage grows with task complexity and is
+robust to both skill over-retrieval and quality degradation, confirming that structured
+orchestration—not larger skill libraries—is the
+key to reliable agent execution.
+
+1
+
+Introduction
+
+LLM-powered agents that interact with external environments—household simulators (Shridhar et al., 2021), scientific laboratories (Wang
+et al., 2022), web interfaces (Yao et al., 2022)—
+must execute long sequences of actions to achieve
+complex goals. A promising direction is skillbased agents (Wang et al., 2023a; Liang et al.,
+2023; Xu and Yan, 2026), which retrieve reusable
+high-level behaviors (skills) from a library to
+1
+
+skills into a typed DAG with explicit causal
+dependencies, and develop a complete runtime featuring verified execution and a formal
+algebra of five typed local repair operators.
+
+cution answers “do this step now”. But no existing method answers the structural question in between: “how do these skills depend on each other,
+and what is the minimal, causally ordered plan?”
+Without this intermediate representation, agents
+cannot control skill quantity (selecting a precise
+subset rather than greedy retrieval), enforce execution order (respecting precondition–effect chains),
+or recover locally from failures (repairing only the
+affected subgraph).
+To fill this gap, we propose the GraSP
+(G RA SP), the first executable skill graph architecture for LLM agents. G RA SP introduces a
+compilation stage that transforms a flat set of retrieved skills into a typed directed acyclic graph
+(DAG) where nodes are instantiated skill invocations and edges encode explicit precondition–
+effect dependencies (state, data, order). This
+graph structure simultaneously addresses all three
+limitations: it controls skill quantity through principled DAG construction, enforces causal execution order via topological traversal, and enables locality-bounded repair—a failure only invalidates its topological descendants, reducing replanning from O(N ) to O(dh ).
+As illustrated in Figure 1, G RA SP operates
+in four stages: (1) memory-conditioned retrieval
+fuses semantic skill matching with episodic experience; (2) DAG compilation organizes retrieved skills into a verified typed graph with
+precondition–effect edges; (3) verified execution with local repair traverses the DAG, checking pre/postconditions at every node and patching failures locally through typed operators; and
+(4) confidence-based routing falls back to reactive
+control when skill reliability is low.
+Across four interactive benchmarks and eight
+LLM backbones, G RA SP consistently outperforms ReAct, Reflexion, ExpeL, and flat-skill
+baselines, improving reward by up to +19 points
+over the strongest baseline while reducing environment steps by up to 41%.
+Our contributions are threefold:
+
+3. We conduct extensive experiments across
+four diverse benchmarks (ALFWorld, ScienceWorld, WebShop, InterCode) and eight
+LLM backbones, showing that G RA SP
+achieves the best performance in every configuration while consistently reducing execution steps, confirming that structured skill
+graphs improve agent performance regardless
+of the underlying model.
+
+2
+2.1
+
+The G RA SP Architecture
+Formulation and overview
+
+Problem setting. We consider an interactive
+agent setting where an LLM agent receives a task
+q, observes state x0 , and interacts with the environment until a goal g is reached or a budget is
+exhausted. The agent has access to a typed skill
+library L and an experience memory M.
+Definition 1 (GraSP). A GraSP for task q under
+state x0 is a DAG G = (V, E) with node set
+V = {vsrc } ∪ Vskill ∪ {vsnk } and typed edges
+E ⊆ V × {state, data, order} × V , satisfying:
+(1) acyclicity, (2) reachability from vsrc to vsnk ,
+(3) goal completeness, and (4) executability (every
+node has bound schema, arguments, and verifier).
+Flat sequences are a special case of GraSP
+with only order edges. The graph structure provides three key advantages: expressiveness (parallel branches and typed dependencies), bounded
+failure propagation (a failure at node v invalidates only its descendants O(dh ) ≪ O(N )), and
+controlled quantity (compilation prunes redundant
+skills into a minimal plan).
+Architecture overview. G RA SP proceeds
+through four stages (Figure 1):
+memoryconditioned retrieval (§2.2) selects skills and
+computes a calibrated confidence; DAG compilation (§2.3) organizes them into a verified GraSP;
+verified execution with local repair (§2.4) traverses the graph with pre/postcondition checking;
+and confidence-based routing (§2.5) decides when
+to fall back to reactive control.
+
+1. We identify that the bottleneck for skill-based
+agents has shifted from skill availability to
+skill orchestration, and pinpoint the absence
+of a compilation layer between retrieval and
+execution as the root cause of flat-sequence
+brittleness.
+
+2.2
+
+2. We propose G RA SP, the first executable skill
+graph architecture that compiles retrieved
+
+Memory-conditioned skill retrieval
+
+Pure semantic retrieval—matching task descriptions to skill names—often selects skills that are
+2
+
+Figure 1: Overview of GraSP (G RA SP). Top: Flat skill execution (left) treats skills as a sequential chain where
+any failure invalidates the entire suffix at O(N ) cost; G RA SP (right) compiles skills into a typed DAG with
+explicit dependencies, enabling O(dh ) local repair. Bottom: The four-stage G RA SP pipeline: (1) Retrieve selects
+a focused subset of skills from a large library conditioned on experience memory; (2) Compile organizes them
+into a verified DAG with typed edges (state, data, order); (3) Execute & Verify traverses the graph, checking
+pre/postconditions at every node; (4) Repair patches only the failed subgraph while preserving verified progress.
+When retrieval confidence is low, the system falls back to ReAct.
+
+goal coverage |Cover(Ŝ, g)|/|g|:
+
+topically relevant but operationally inappropriate
+for the current state. Episodic experience provides
+a complementary signal: skills that succeeded in
+similar past situations are more likely to succeed
+again.
+Given task q, current state x, skill library L,
+and experience memory M, we retrieve the topk successful memory records R with normalized
+similarities ρ1 , . . . , ρk . We fuse a direct semantic
+distribution pdir (s | q, x) with a memory-induced
+distribution that weights skills by their frequency
+in successful trajectories:
+
+cret = η σ(w⊤ f + b) + (1 − η) chist ,
+
+(2)
+
+where chist is the historical success rate in the confidence bin.
+2.3
+
+DAG compilation
+
+A flat list of retrieved skills discards the dependency information needed for structured execution. The compilation stage recovers this structure
+by organizing skills into a GraSP (Definition 1)
+where precondition–effect relationships and data
+flows are made explicit.
+Each skill node v ∈ Vskill carries attributes:
+
+p(s | q, x, R) = λ pdir (s | q, x)
+1 Pk
++ (1−λ)
+ρj · freq(s, τij ), (1)
+Z j=1
+
+eff
+a(v) = ⟨κv , θv , ϕpre
+v , ϕv , νv , ζv , cv , bv ⟩,
+
+(3)
+
+where κv is the skill schema, θv the bound areff
+guments, ϕpre
+v /ϕv the pre/postconditions, νv the
+verifier, ζv the execution status, cv the confidence,
+and bv the repair budget.
+The three edge types encode different dependencies:
+
+from which we select the top-M skills Ŝ.
+Retrieval confidence. To decide whether to
+trust the retrieved skills (§2.5), we compute a
+calibrated confidence from four features—mean
+memory similarity ρ̄, distributional agreement 1 −
+JSD(pdir ∥pmem ), top-skill margin p(1) − p(2) , and
+
+• State edges (u, state, v): an effect of u satisfies a precondition of v.
+3
+
+• Data edges (u, data, v): an output of u binds
+an input of v.
+
+2. I NSERT P REREQ(U, vf ): inserts a subgraph
+U that establishes missing preconditions
+P − (vf , xt ) = {p ∈ ϕpre
+vf : xt ̸|= p}.
+
+• Order edges (u, order, v): a soft precedence
+constraint from experience or resource conflicts.
+
+3. S UBSTITUTE(vf , κ′ ): replaces the skill
+schema while preserving downstream inter↓
+face compatibility: ϕeff
+κ′ ⊇ Φ (vf ).
+
+State and data edges are hard (cannot be removed without proof of obsolescence); order
+edges are soft (may be rewired during repair). The
+compilation process uses an LLM to propose skill
+invocations, validates argument bindings against
+the library, infers edges from precondition–effect
+matching and memory-induced precedence priors,
+resolves cycles by removing low-confidence soft
+edges, and attaches verifiers. If compilation fails,
+the system falls back to reactive control.
+2.4
+
+4. R EWIRE(vf , ∆E): locally edits edges (add/remove/retype) in the neighborhood of vf .
+5. B YPASS(vf ): skips the node when the current state already satisfies its downstream requirements: xt |= Φ↓ (vf ).
+Repair is bounded: the patch size is limited to
+|∆V | ≤ Lmax nodes and |∆E| ≤ Emax edges
+within an h-hop neighborhood of vf . If local repair fails, the system escalates to global replanning or ReAct fallback. The complete main loop
+is given in Algorithm 1 (Appendix B).
+
+Verified execution with local repair
+
+Even a well-compiled DAG may encounter unexpected failures at runtime—preconditions may not
+hold due to stochastic environments, or skill implementations may produce unexpected outputs.
+Without a principled repair mechanism, any failure forces the agent to discard all progress. The
+local repair algebra addresses this by providing
+typed, structure-aware recovery operators.
+The GraSP executor traverses the DAG in topological order. For each ready node v:
+
+2.5
+
+Confidence-based routing
+
+Not all tasks benefit from structured execution.
+When the calibrated retrieval confidence cret
+(Eq. 2) falls below τlow , G RA SP falls back to ReAct, avoiding unreliable skill execution. Above
+τhigh , the full DAG with local repair is used; in
+between, repair budgets are increased as a precaution. Since G RA SP subsumes ReAct as a special case, this provides an empirical no-regression
+property.
+
+1. Precondition check: verify xt |= ϕpre
+v .
+2. Execution: run the skill implementation fκv
+with bound arguments θv .
+
+3
+
+3. Postcondition
+νv (xt , xt+1 ).
+
+Benchmarks. We evaluate on four interactive
+benchmarks: ALFWorld (Shridhar et al., 2021)
+(household tasks, seen/unseen splits), ScienceWorld (Wang et al., 2022) (science experiments,
+30 task types), WebShop (Yao et al., 2022) (web
+shopping, 500 sessions), and InterCode (Yang
+et al., 2023) (Bash commands, NL2Bash split).
+We report average reward for ALFWorld, ScienceWorld, and WebShop, and success rate for InterCode, along with average environment steps.
+
+verification:
+
+3.1
+
+check
+
+4. If all pass, mark v as verified and proceed
+to the next ready node.
+When any check fails, the system generates a
+failure event ϵ = ⟨v, τϵ , mϵ , xt ⟩, where τϵ classifies the failure type (precondition, execution, postcondition, or timeout). The system then invokes
+local graph repair.
+
+Experiments
+Setup
+
+Baselines. We compare against ReAct (Yao
+et al., 2023b) (token-level thought-action loop),
+Reflexion (Shinn et al., 2023) (episode-level selfreflection), ExpeL (Zhao et al., 2024) (experience learning with insight extraction), and ReAct
++ Skills (skills provided as callable tools without
+DAG compilation). To ensure fair comparison, all
+skill-augmented methods (ExpeL, ReAct+Skills,
+
+Repair operators. We define five typed repair
+operators, each a local graph transformation r :
+(G, ϵ, xt ) 7→ G′ that preserves DAG validity and
+all unaffected verified nodes:
+1. R EBIND(vf , θ′ ): updates the arguments of
+the failed node when the skill is appropriate
+but bindings are incorrect.
+4
+
+Reward (GoS ExpeL)
+
+25
+
+Models. We evaluate eight LLM backbones:
+DeepSeek V3.2 (primary), GPT-4.1, Claude-4Sonnet, GLM-5, Gemini 2.5 Pro, o4 Mini,
+Qwen3-235B, and Kimi-K2.5. All models are accessed via their official APIs at temperature 0.0.
+Full hyperparameters and ablation protocols are in
+Appendix C (Table 3).
+3.2
+
+ALFWorld
+ScienceWorld
+
+10
+5
+
+19.2
+16.4
+
+15
+
+0
+
+13.4
+10.8
+6.8
+
+5.2
+
+Short
+
+Medium
+Task Complexity
+
+Long
+
+100
+80
+60
+
+(b) Typed repair vs. global replan
+GoS (local)
+Global Replan
+
+84.2
+72.6
+61.8
+
+54.2
+
+58.4
+42.6
+
+40
+20
+0
+
+Precond.
+
+Execution
+Failure Type
+
+Postcond.
+
+Figure 2: Why graph structure helps. (a) G RA SP’s
+advantage over ExpeL grows monotonically with task
+complexity (from ∼6% on short tasks to ∼18% on long
+tasks). (b) Typed repair operators recover from precondition failures at 84.2%, 22.4% above global replanning, and lead by ∼16% on postcondition failures.
+
+How well does G RA SP perform?
+
+Table 1 presents the comprehensive comparison
+across all four benchmarks, five methods, and
+eight LLM backbones.
+
+repair is more efficient. The monolithic baseline (67.1/71.0) is worse than selective retrieval
+(74.9/79.6), validating “less is more.” DAG compilation is most critical because it both filters irrelevant skills and makes dependency order explicit.
+
+Finding 1: G RA SP achieves the best performance in every configuration. G RA SP outperforms every baseline in all 48 (model, split)
+cells, with average gains of +12.7 points over
+ExpeL and +6.9 points over the strongest percell baseline, alongside ∼24% fewer environment
+steps on average over ReAct (and ∼10% over
+ReAct + Skills), reaching up to 41% in the best
+case. The gains are consistent across reasoningfocused models (o4 Mini), general-purpose models (GPT-4.1, Claude-4-Sonnet), and open-weight
+models (GLM-5, Qwen3-235B, Kimi-K2.5), suggesting that G RA SP addresses an architectural
+bottleneck rather than exploiting model-specific
+idiosyncrasies.
+
+Finding 4: G RA SP advantage grows with task
+complexity. Figure 2(a) shows the gap over ExpeL grows from ∼6% on short tasks (≤10 steps)
+to ∼18% on long tasks (≥20 steps): as chains
+lengthen, a single mid-sequence failure forces flat
+agents to discard all downstream progress, while
+G RA SP localizes the damage to the affected subgraph. The scaling matches the O(N ) versus
+O(dh ) analysis in §2.1: with a typical out-degree
+d≈2 and repair radius h=2 on ALFWorld, the affected subgraph stays at four to five nodes regardless of the total plan length, so the marginal cost
+of an extra failure becomes essentially constant
+rather than linear in N .
+
+Finding 2: Graph structure improves both effectiveness and efficiency. G RA SP simultaneously increases reward and reduces steps. On
+ALFWorld (seen) it averages 10.2–18.9 steps per
+episode vs. 14.8–23.3 for ReAct (a 19–35% reduction in LLM calls, since each step is one
+call), and the reduction reaches 41% on longhorizon ScienceWorld unseen tasks (Gemini 2.5
+Pro: 19.1→11.3).
+3.3
+
+20
+
+(a) GoS advantage grows with complexity
+Recovery Rate (%)
+
+and G RA SP) have access to the same skill library
+and episodic memory; the only difference is how
+skills are organized and executed.
+
+Finding 5: Typed repair outperforms global
+replanning on all failure types. Figure 2(b)
+shows G RA SP recovers from precondition failures
+at 84.2% vs. 61.8% for global replan (+22.4%),
+and leads by ∼16% on postcondition failures.
+Typed edges encode why a node failed, so a missing precondition triggers targeted re-retrieval of
+the upstream producer rather than rediscovering
+the full dependency chain.
+
+Why does graph structure help?
+
+We isolate the contribution of each component and
+analyze when graph structure provides the most
+benefit.
+
+Finding 6: Three-layer fault tolerance catches
+most failures. Figure 3 shows that 35–58% of
+episodes succeed directly, local repair resolves another 12–25%, global replan and ReAct fallback
+catch a further 5–8% and 8–17%, leaving only
+13–18% as ultimate failures. Escalating from local patches to global replan to reactive exploration
+matches failures of increasing severity.
+
+Finding 3: Every component contributes; DAG
+compilation is the most critical. Table 2 shows
+experience memory adds +1.6/+1.5, DAG compilation +1.9/+1.6, local repair +1.3/+1.4, and routing +0.9/+0.8. Replacing local repair with global
+replan loses 3.2/3.1, confirming locality-bounded
+5
+
+Table 1: Main results across four interactive benchmarks. R = average reward/score (↑), S = average environment steps (↓). Best in bold, second-best underlined. For ALFWorld and WebShop, R is average reward (0–100).
+For ScienceWorld, R is average score (0–100). For InterCode, R is success rate (%). Results averaged over 3 runs.
+Model
+
+ALFWorld
+
+Method
+
+Seen
+
+WebShop
+
+Unseen
+
+Seen
+
+ScienceWorld
+Seen
+
+InterCode
+
+Unseen
+
+NL2Bash
+
+R↑
+
+S↓
+
+R↑
+
+S↓
+
+R↑
+
+S↓
+
+R↑
+
+S↓
+
+R↑
+
+S↓
+
+R↑
+
+S↓
+
+DeepSeek V3.2
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+66.4
+70.1
+67.9
+74.9
+80.6
+
+19.5
+18.2
+18.9
+17.2
+14.5
+
+69.4
+73.6
+76.1
+80.3
+83.6
+
+19.3
+18.0
+17.4
+16.3
+14.8
+
+31.6
+35.3
+29.2
+40.2
+46.2
+
+24.1
+22.4
+24.0
+21.3
+17.8
+
+69.9
+72.4
+74.9
+79.6
+84.9
+
+17.6
+16.3
+16.0
+15.0
+11.9
+
+64.7
+67.8
+74.1
+78.2
+81.3
+
+19.3
+17.9
+17.5
+16.6
+12.5
+
+72.6
+75.8
+74.2
+79.1
+79.6
+
+14.8
+14.0
+14.3
+13.2
+11.2
+
+Gemini 2.5 Pro
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+60.0
+67.2
+68.6
+76.1
+91.4
+
+18.7
+17.3
+17.9
+16.2
+12.8
+
+61.9
+69.4
+70.2
+77.3
+91.0
+
+19.2
+17.7
+17.0
+15.8
+12.0
+
+31.7
+38.2
+33.1
+44.0
+53.0
+
+22.1
+19.9
+19.3
+18.2
+14.9
+
+58.2
+66.8
+72.8
+78.8
+88.8
+
+18.4
+16.9
+15.0
+13.8
+11.5
+
+56.1
+63.2
+67.4
+74.1
+86.3
+
+19.1
+17.5
+14.9
+14.0
+11.3
+
+70.8
+74.3
+73.4
+77.7
+78.3
+
+15.6
+14.6
+14.8
+14.1
+12.0
+
+o4 Mini
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+45.7
+52.1
+56.4
+61.6
+68.6
+
+23.3
+21.9
+21.4
+20.6
+18.9
+
+49.3
+55.8
+59.0
+64.6
+73.3
+
+23.3
+22.0
+21.9
+20.7
+17.1
+
+24.2
+29.4
+26.7
+33.4
+36.2
+
+22.0
+20.5
+21.9
+19.9
+18.8
+
+64.9
+67.6
+68.0
+74.1
+74.6
+
+15.1
+14.4
+13.7
+13.3
+13.3
+
+59.9
+62.8
+65.7
+69.4
+71.1
+
+15.0
+14.5
+14.0
+13.4
+12.4
+
+66.4
+70.2
+67.9
+71.6
+76.7
+
+17.2
+15.8
+16.2
+15.1
+13.8
+
+GPT-4.1
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+58.6
+64.2
+65.7
+72.3
+84.3
+
+20.1
+18.5
+17.6
+16.2
+13.1
+
+56.1
+62.8
+64.8
+72.4
+88.1
+
+20.4
+18.6
+17.4
+16.5
+12.4
+
+30.4
+34.6
+32.6
+41.6
+55.2
+
+21.8
+20.1
+18.4
+17.8
+16.8
+
+57.4
+66.8
+72.1
+76.7
+81.6
+
+19.1
+17.0
+14.4
+14.0
+13.7
+
+52.3
+61.6
+66.8
+72.0
+79.1
+
+20.2
+18.2
+15.6
+14.9
+13.2
+
+72.4
+72.4
+70.8
+75.1
+75.8
+
+14.6
+13.8
+14.6
+13.3
+12.5
+
+Qwen3-235B
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+55.4
+61.8
+63.2
+68.9
+77.9
+
+20.5
+19.0
+18.2
+17.3
+14.7
+
+53.8
+60.2
+62.4
+69.4
+82.8
+
+21.0
+19.5
+17.8
+16.8
+13.9
+
+28.6
+32.4
+30.8
+37.1
+42.3
+
+22.4
+20.6
+19.2
+18.7
+18.2
+
+54.8
+63.6
+69.4
+73.0
+74.5
+
+19.6
+17.7
+15.3
+14.9
+14.8
+
+50.6
+59.4
+63.8
+67.6
+69.6
+
+20.8
+18.9
+16.2
+15.8
+15.8
+
+71.6
+70.8
+70.6
+73.5
+74.2
+
+15.4
+14.6
+14.2
+13.8
+13.4
+
+ReAct
+Reflexion
+Claude-4-Sonnet ExpeL
+ReAct + Skills
+G RA SP
+
+63.4
+69.6
+71.2
+77.0
+86.4
+
+16.4
+15.0
+14.2
+13.6
+12.6
+
+61.2
+67.4
+69.6
+75.5
+85.1
+
+17.1
+15.7
+15.4
+14.7
+13.4
+
+32.8
+34.2
+33.4
+42.9
+62.3
+
+19.8
+18.0
+16.6
+16.0
+14.7
+
+66.4
+71.2
+74.6
+78.8
+82.4
+
+16.3
+15.3
+14.6
+14.2
+13.8
+
+62.1
+67.8
+72.4
+76.6
+80.2
+
+17.0
+15.7
+15.0
+14.6
+14.2
+
+70.8
+73.6
+73.4
+76.7
+77.6
+
+14.8
+14.0
+13.6
+13.2
+13.2
+
+GLM-5
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+65.2
+71.8
+73.4
+80.9
+96.3
+
+14.8
+13.4
+11.6
+11.0
+10.2
+
+64.6
+71.2
+72.6
+80.0
+94.9
+
+14.6
+13.2
+11.4
+10.9
+10.3
+
+29.4
+33.6
+31.8
+40.1
+52.0
+
+20.4
+18.6
+17.2
+16.6
+15.4
+
+68.2
+72.4
+75.4
+78.9
+79.8
+
+16.6
+15.4
+15.6
+15.0
+14.8
+
+63.8
+68.6
+73.2
+77.2
+80.2
+
+17.6
+16.4
+15.6
+15.1
+14.6
+
+68.4
+72.1
+67.9
+75.6
+76.7
+
+16.5
+15.2
+16.0
+14.6
+13.4
+
+Kimi-K2.5
+
+ReAct
+Reflexion
+ExpeL
+ReAct + Skills
+G RA SP
+
+61.8
+67.4
+69.4
+75.1
+83.8
+
+17.6
+16.2
+15.4
+14.3
+12.8
+
+60.4
+66.2
+68.2
+74.5
+85.4
+
+17.2
+15.8
+15.0
+14.6
+12.6
+
+27.8
+31.6
+30.2
+38.5
+51.6
+
+21.6
+19.8
+18.6
+17.9
+16.4
+
+63.6
+68.8
+71.2
+75.5
+79.5
+
+17.4
+16.0
+16.0
+15.6
+15.2
+
+58.8
+65.4
+69.1
+73.5
+77.8
+
+18.6
+17.2
+16.4
+15.9
+15.4
+
+73.2
+73.4
+73.2
+76.8
+77.4
+
+15.0
+14.2
+14.6
+13.6
+12.8
+
+6
+
+Table 2:
+Component ablation on ALFWorld
+(seen, SR%) and ScienceWorld (seen, reward) using
+DeepSeek V3.2.
+ALF SciW
+
+ReAct (no skills)
+Monolithic (all skills, no selection)
+ReAct + Skills (flat)
++ Experience Memory
++ DAG Compilation
++ Local Repair
++ Routing (G RA SP)
+
+66.4
+67.1
+74.9
+76.5
+78.4
+79.7
+80.6
+
+69.9
+71.0
+79.6
+81.1
+82.7
+84.1
+84.9
+
+G RA SP w/o DAG (sequential)
+G RA SP w/o Local Repair
+G RA SP w/ Global Replan
+
+76.8
+78.6
+77.4
+
+81.5
+82.9
+81.8
+
+58%
+
+35%
+
+WebShop
+
+12%
+
+22%
+
+8%
+
+8%
+
+38%
+
+25%
+
+52%
+
+ALFWorld
+
+0
+
+20
+
+Direct
+Success
+
+8%
+
+19%
+Local
+Repair
+
+40
+60
+Episode Distribution (%)
+
+14%
+
+84% 16%
+
+85% 15%
+
+5%
+11%
+87%13%
+Global
+ReAct
+Replan
+Fallback
+
+80
+
+1
+
+2 3
+5
+Number of Retrieved Skills (M)
+
+8
+
+Failed
+
+Skill Quality Impact on GoS (ALFWorld, DeepSeek V3.2)
+
+100
+
+(a) Reward (%) by Model
+
+Figure 3: Repair escalation. Stacked distribution of
+episode outcomes across benchmarks. Most episodes
+succeed directly or via local repair; only 13–18% fail
+completely. The dashed line marks total success rate.
+G RA SP’s three-layer fault tolerance (local repair →
+global replan → ReAct fallback) progressively catches
+failures.
+
+3.4
+
+Flat Execution
+GoS
+
+Figure 4: Skill quantity and quality. (a) Flat execution peaks around M =3 then drops; G RA SP is robust
+to over-retrieval and remains above flat-at-optimum
+even at M =8. (b) When skill quality drops from High
+to Low, G RA SP loses only ∼5% vs. ∼9% for flat execution.
+
+3-layer fault tolerance
+
+ScienceWorld
+
+70
+
+60
+
+82% 18%
+
+17%
+
+75
+
+65
+
+Repair Escalation: How GoS Handles Failures
+InterCode
+
+Skill Quantity vs. Reward (ALFWorld)
+
+80
+Reward (%)
+
+Configuration
+
+85
+
+(b) LLM Calls by Pipeline Stage
+
+DSV3
+
+74.2
+
+78.4
+
+80.6
+
+Gemini
+
+84.8
+
+89.2
+
+91.4
+
+95
+90
+
+o4 Mini
+
+62.4
+
+66.8
+
+68.6
+
+GPT-4.1
+
+77.6
+
+82.0
+
+84.3
+
+Qwen3
+
+71.4
+
+75.6
+
+77.9
+
++6.4
+
+85
+80
+75
+
++6.2
+
++6.5
+
+79.8
+
+84.2
+
+86.4
+
+70
+
++6.6
+
+89.6
+
+94.0
+
+96.3
+
+65
+
++6.7
+
+Kimi
+
+77.2
+
+81.4
+
+83.8
+
+Medium
+
+High
+
+Skill Quality
+
+Compilation
+
+1.1
+
+1.0
+
++6.6
+
+2.1
+
+1.9
+
+1.8
+
+12
+10
+
++0.2
++0.3
+
+8
+
++6.7
+
+GLM-5
+
+Low
+
+1.2
+
++6.6
+
+Sonnet4
+
+60
+
+Retrieval
+
+Execution
+Repair
+
+5.6
+2.8
+
+4.6
+1.4
+
+4.2
+0.6
+
+6
+4
+2
+
+Total
+
+11.7
+Low
+
+9.0
+
+7.6
+
+Medium
+
+High
+
+Skill Quality
+
+0
+
++1.4
++2.2
+Qualitysensitive
++4.1
+
+Figure 5: Skill quality × cost. Multi-metric heatmap
+on ALFWorld. G RA SP achieves the highest reward at
+all quality levels while using the fewest LLM calls and
+steps. Skill-free methods (ReAct, Reflexion) are unaffected; flat skill methods degrade sharply; G RA SP
+degrades gracefully due to compilation filtering and repair.
+
+Orchestration over volume
+
+A key thesis of this work is that the bottleneck has
+shifted from skill availability to skill orchestration. We test this through skill quantity and quality
+analyses.
+Finding 7: More skills hurt flat execution;
+G RA SP is robust. Figure 4(a) shows flat execution peaks around M =3 and declines with more
+skills, dropping by ∼6% at M =8. G RA SP degrades gracefully: at M =8, G RA SP (79.4) still
+outperforms flat execution at its optimal M =3
+(74.9). The divergence arises because flat agents
+dump all retrieved skills into the prompt, and irrelevant skills compete for the LLM’s attention, causing distraction and hallucinated action sequences.
+DAG compilation acts as a structural filter: skills
+that cannot be connected via precondition–effect
+edges are automatically excluded from the execution graph.
+
+Finding 8: G RA SP is more robust to skill
+quality degradation. Figure 5 presents a multimetric view across three quality levels. When skill
+quality degrades from High to Low, flat execution
+drops ∼9% in reward while G RA SP drops only
+∼5%. Crucially, G RA SP at Low quality (75.4)
+still outperforms flat execution at High quality
+(74.9). This robustness stems from two mechanisms: compilation-time verification rejects skills
+with ill-formed preconditions before they enter the
+graph, and typed repair operators compensate for
+imprecise descriptions by re-routing through alternative dependency paths at execution time.
+7
+
+4
+
+Related work
+
+rez et al., 2024), complex reasoning over knowledge graphs (Xia et al., 2025), and tool ecosystems (Liu et al., 2024, 2023). On the execution side, classical AI planning offers hierarchical task networks (Erol et al., 1994), behavior
+trees (Colledanchise and Ögren, 2018), and plan
+repair (Fox et al., 2006), which provide structured
+execution with recovery but are not designed for
+LLM-based skill invocation with natural-language
+preconditions and effects. In the LLM agent
+context, AdaPlanner (Sun et al., 2024) and Inner Monologue (Huang et al., 2023) perform textlevel replanning, DEPS (Wang et al., 2023b) and
+Generative Agents (Park et al., 2023) employ hierarchical planning with reusable behaviors, and
+LATS (Zhou et al., 2024) combines tree search
+with backtracking—all operating on text representations without typed graph structure. G RA SP
+is distinguished by its typed precondition–effect
+edges for skill composition, a formal five-operator
+repair algebra with bounded patch scope, calibrated routing between structured and reactive execution, and the “less is more” design principle
+that DAG compilation should produce minimal execution plans from large skill libraries.
+
+Skill-based agents and skill ecosystems. LLM
+agents increasingly leverage reusable skill libraries for long-horizon tasks. Voyager (Wang
+et al., 2023a) and Code as Policies (Liang et al.,
+2023) build executable skill libraries in embodied domains; SayCan (Ahn et al., 2022) and ProgPrompt (Singh et al., 2023) ground language models in robotic primitives. Experience-driven methods such as ExpeL (Zhao et al., 2024) and Reflexion (Shinn et al., 2023) extract episodic insights or
+perform episode-level retry to improve skill selection, while SkillRL (Xia et al., 2026a) co-evolves
+a skill library with RL-based policy optimization. Reinforced retrieval and co-adaptation techniques have also been explored in agentic RAG
+settings (Xia et al., 2026b; Li et al., 2026b). More
+recent work studies programmatic skill induction, including SkillWeaver (Zheng et al., 2025),
+ASI (Wang et al., 2025), and CUA-Skill (Chen
+et al., 2026). On the infrastructure side, recent
+work has built large-scale skill repositories with
+rich relational metadata (Xu and Yan, 2026; Li
+et al., 2026a), while SkillsBench (Li et al., 2026c;
+Hu et al., 2026) reveals that focused skill sets (2–3
+modules) outperform comprehensive documentation, and that models cannot reliably self-generate
+effective procedural knowledge. As tool inventories scale to thousands of APIs (Patil et al., 2023;
+Qin et al., 2024; Li et al., 2023), retrieval itself
+becomes a challenge—generic dense retrievers are
+often poorly aligned with real tool-use needs (Shi
+et al., 2025; Schick et al., 2023; Mialon et al.,
+2023). Together, these results establish that skill
+availability is no longer the bottleneck—yet all existing methods execute retrieved skills as flat sequences or context-augmented prompts, without
+explicit dependency tracking or structured composition. G RA SP addresses this orchestration gap by
+compiling skills into typed DAGs where composition, verification, and repair are first-class operations.
+
+5
+
+Conclusion
+
+We have presented GraSP (G RA SP), the first executable skill graph architecture for LLM agents.
+Starting from the observation that the bottleneck
+for skill-based agents has shifted from skill availability to skill orchestration, G RA SP introduces
+a compilation layer between retrieval and execution that transforms flat skill sets into typed
+DAGs with explicit precondition–effect dependencies, executes them with node-level verification,
+and recovers from failures through five typed repair operators that bound replanning to a local
+subgraph. Experiments across four interactive
+benchmarks and eight LLM backbones show that
+G RA SP achieves the best performance in every
+configuration, with advantages that grow monotonically with task complexity, and that it is robust to both skill over-retrieval and skill quality degradation. These results suggest that structured orchestration—not larger skill libraries—is
+the key to reliable long-horizon agent execution,
+and that the DAG compilation paradigm can extend broadly to multimodal, API-based, and multiagent settings.
+
+Graph-structured reasoning and execution.
+Chain-of-Thought (Wei et al., 2022), Tree-ofThought (Yao et al., 2023a), and Graph-ofThought (Besta et al., 2024) progressively structure LLM reasoning as chains, trees, and graphs
+of text—but these operate on internal traces without environmental side effects. Graph structure
+has also been applied to document retrieval (Edge
+et al., 2024), associative memory (Jiménez Gutiér8
+
+6
+
+Limitations and discussion
+
+Bernal Jiménez Gutiérrez, Yiheng Shu, Yu Gu, Michihiro
+Yasunaga, and Yu Su. 2024. HippoRAG: Neurobiologically inspired long-term memory for large language models. arXiv:2405.14831.
+
+DAG expressiveness. The DAG assumption
+precludes cyclic execution patterns. While most
+interactive tasks decompose naturally into acyclic
+subgoal sequences, tasks requiring iterative refinement (e.g., repeated measurement-adjustment cycles) may require extensions such as loop constructs or DAG unrolling.
+
+Hao Li, Chunjiang Mu, Jianhao Chen, Siyue Ren, Zhiyao
+Cui, Yiqun Zhang, Lei Bai, and Shuyue Hu. 2026a. Organizing, orchestrating, and benchmarking agent skills at
+ecosystem scale. arXiv:2603.02176.
+Minghao Li, Yingxiu Zhao, Bowen Yu, Feifan Song, Hangyu
+Li, Haiyang Yu, Zhoujun Li, Fei Huang, and Yongbin Li.
+2023. API-bank: A comprehensive benchmark for toolaugmented LLMs. arXiv:2304.08244.
+
+Broader
+applicability. We
+demonstrate
+G RA SP on four text-based interactive environments. The framework is directly applicable
+to other sequential decision-making domains,
+including multimodal environments (visual navigation, GUI interaction), real-world API-based
+tasks, and multi-agent coordination scenarios.
+Extending G RA SP to these settings is a natural
+next step.
+
+Wenwei Li, Ming Xu, Tianle Xia, Lingxiang Hu, Yiding
+Sun, Linfang Shang, Liqun Liu, Peng Shu, Huan Yu, and
+Jie Jiang. 2026b. Towards faithful industrial RAG: A
+reinforced co-adaptation framework for advertising QA.
+arXiv:2602.22584.
+Xiangyi Li, Wenbo Chen, Yimin Liu, Shenghan Zheng, and
+1 others. 2026c. SkillsBench: Benchmarking how well
+agent skills work across diverse tasks. arXiv:2602.12670.
+Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, and Andy Zeng. 2023.
+Code as policies: Language model programs for embodied control. In ICRA.
+
+References
+Michael Ahn, Anthony Brohan, Noah Brown, Yevgen Chebotar, Omar Cortes, Byron David, Chelsea Finn, and 1 others. 2022. Do as i can, not as i say: Grounding language
+in robotic affordances. arXiv:2204.01691.
+
+Xukun Liu, Zhiyuan Peng, Xiaoyuan Yi, Xing Xie, Lirong
+Xiang, Yuchen Liu, and Dongkuan Xu. 2024. ToolNet:
+Connecting large language models with massive tools via
+tool graph. arXiv:2403.00839.
+
+Maciej Besta, Nils Blach, Ales Kubicek, Robert Gerstenberger, Marcin Podstawski, Lukas Gianinazzi, Joanna
+Gajber, Tomasz Lehmann, Hubert Niewiadomski, Piotr
+Nyczyk, and Torsten Hoefler. 2024. Graph of thoughts:
+Solving elaborate problems with large language models.
+In AAAI.
+
+Zhaoyang Liu, Zeqiang Lai, Zhangwei Gao, Erfei Cui, Ziheng Li, Xizhou Zhu, Lewei Lu, Qifeng Chen, Yu Qiao,
+Jifeng Dai, and Wenhai Wang. 2023. ControlLLM: Augment language models with tools by searching on graphs.
+arXiv:2310.17796.
+
+Tianyi Chen, Yinheng Li, Michael Solodko, Sen Wang, Nan
+Jiang, Tingyuan Cui, Junheng Hao, Jongwoo Ko, Sara
+Abdali, Leon Xu, Suzhen Zheng, Hao Fan, Pashmina
+Cameron, Justin Wagle, and Kazuhito Koishida. 2026.
+CUA-Skill: Develop skills for computer using agent.
+arXiv:2601.21123.
+
+Grégoire Mialon, Roberto Dessì, Maria Lomeli, Christoforos
+Nalmpantis, Ram Pasunuru, Roberta Raileanu, Baptiste
+Rozière, Timo Schick, Jane Dwivedi-Yu, Asli Celikyilmaz, and 1 others. 2023. Augmented language models:
+A survey. Transactions on Machine Learning Research.
+
+Michele Colledanchise and Petter Ögren. 2018. Behavior
+Trees in Robotics and AI. CRC Press.
+
+Joon Sung Park, Joseph C. O’Brien, Carrie J. Cai, Meredith Ringel Morris, Percy Liang, and Michael S. Bernstein.
+2023. Generative agents: Interactive simulacra of human
+behavior. In UIST.
+
+Darren Edge, Ha Trinh, Newman Cheng, Joshua
+Bradley, Alex Chao, Apurva Mody, Steven Truitt,
+and Jonathan Larson. 2024. From local to global: A
+graph RAG approach to query-focused summarization.
+arXiv:2404.16130.
+
+Shishir G. Patil, Tianjun Zhang, Xin Wang, and Joseph E.
+Gonzalez. 2023. Gorilla: Large language model connected with massive APIs. arXiv:2305.15334.
+
+Kutluhan Erol, James Hendler, and Dana S. Nau. 1994. HTN
+planning: Complexity and expressivity. In AAAI.
+Maria Fox, Alfonso Gerevini, Derek Long, and Ivan Serina.
+2006. Plan stability: Replanning versus plan repair. In
+ICAPS.
+
+Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan,
+Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, and 1 others. 2024. ToolLLM: Facilitating large language models
+to master 16000+ real-world APIs. In ICLR.
+
+Lingxiang Hu, Yiding Sun, Tianle Xia, Wenwei Li, Ming Xu,
+Liqun Liu, Peng Shu, Huan Yu, and Jie Jiang. 2026. ADBench: A real-world, trajectory-aware advertising analytics benchmark for LLM agents. arXiv:2602.14257.
+
+Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta
+Raileanu, Maria Lomeli, Luke Zettlemoyer, Nicola Cancedda, and Thomas Scialom. 2023. Toolformer: Language models can teach themselves to use tools. NeurIPS.
+
+Wenlong Huang, Fei Xia, Ted Xiao, Harris Chan, Jacky
+Liang, Pete Florence, Andy Zeng, and 1 others. 2023.
+Inner monologue: Embodied reasoning through planning
+with language models. In CoRL.
+
+Zhengliang Shi, Yuhan Wang, Lingyong Yan, Pengjie Ren,
+Shuaiqiang Wang, Dawei Yin, and Zhaochun Ren. 2025.
+Retrieval models aren’t tool-savvy: Benchmarking tool retrieval for large language models. arXiv:2503.01763.
+
+9
+
+Noah Shinn, Federico Cassano, Edward Berman, Ashwin
+Gopinath, Karthik Narasimhan, and Shunyu Yao. 2023.
+Reflexion: Language agents with verbal reinforcement
+learning. In NeurIPS.
+
+Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas
+Griffiths, Yuan Cao, and Karthik Narasimhan. 2023a.
+Tree of thoughts: Deliberate problem solving with large
+language models. In NeurIPS.
+
+Mohit Shridhar, Jesse Thomason, Daniel Gordon, Yonatan
+Bisk, Winson Han, Roozbeh Mottaghi, Luke Zettlemoyer,
+and Dieter Fox. 2021. ALFWorld: Aligning text and embodied environments for interactive learning. In ICLR.
+
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran,
+Karthik Narasimhan, and Yuan Cao. 2023b. ReAct: Synergizing reasoning and acting in language models. In
+ICLR.
+
+Ishika Singh, Valts Blukis, Arsalan Mousavian, Ankit Goyal,
+Danfei Xu, Jonathan Tremblay, Dieter Fox, Jesse Thomason, and Animesh Garg. 2023. ProgPrompt: Generating
+situated robot task plans using large language models. In
+ICRA.
+
+Andrew Zhao, Daniel Huang, Quentin Xu, Matthieu Lin,
+Yong-Jin Liu, and Gao Huang. 2024. ExpeL: LLM agents
+are experiential learners. In AAAI.
+
+Haotian Sun, Yuchen Zhuang, Lingkai Kong, Bo Dai, and
+Chao Zhang. 2024. AdaPlanner: Adaptive planning from
+feedback with language models. In NeurIPS.
+
+Boyuan Zheng, Michael Y. Fatemi, Xiaolong Jin,
+Zora Zhiruo Wang, Apurva Gandhi, Yueqi Song, Yu Gu,
+Jayanth Srinivasa, Gaowen Liu, Graham Neubig, and
+Yu Su. 2025. SkillWeaver: Web agents can self-improve
+by discovering and honing skills. arXiv:2504.07079.
+
+Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar,
+Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. 2023a. Voyager: An open-ended embodied agent
+with large language models. In NeurIPS.
+
+Andy Zhou, Kai Yan, Michal Shlapentokh-Rothman, Haohan
+Wang, and Yu-Xiong Wang. 2024. Language agent tree
+search unifies reasoning, acting, and planning in language
+models. In ICML.
+
+Ruoyao Wang, Peter Jansen, Marc-Alexandre Côté, and
+Prithviraj Ammanabrolu. 2022. ScienceWorld: Is your
+agent smarter than a 5th grader? In EMNLP.
+Zihao Wang, Shaofei Cai, Guanzhou Chen, Anji Liu, Xiaojian Ma, and Yitao Liang. 2023b. Describe, explain, plan
+and select: Interactive planning with large language models enables open-world multi-task agents. In NeurIPS.
+Zora Zhiruo Wang, Apurva Gandhi, Graham Neubig, and
+Daniel Fried. 2025. Inducing programmatic skills for
+agentic tasks. arXiv:2504.06821.
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma,
+Brian Ichter, Fei Xia, Ed Chi, Quoc Le, and Denny Zhou.
+2022. Chain-of-thought prompting elicits reasoning in
+large language models. In NeurIPS.
+Peng Xia, Jianwen Chen, Hanyang Wang, Jiaqi Liu, Kaide
+Zeng, Yu Wang, Siwei Han, Yiyang Zhou, Xujiang Zhao,
+Haifeng Chen, Zeyu Zheng, Cihang Xie, and Huaxiu
+Yao. 2026a. SkillRL: Evolving agents via recursive skillaugmented reinforcement learning. arXiv:2602.08234.
+Tianle Xia, Liang Ding, Guojia Wan, Yibing Zhan, Bo Du,
+and Dacheng Tao. 2025. Improving complex reasoning
+over knowledge graph with logic-aware curriculum tuning. In AAAI.
+Tianle Xia, Ming Xu, Lingxiang Hu, Yiding Sun, Wenwei Li, Linfang Shang, Liqun Liu, Peng Shu, Huan Yu,
+and Jie Jiang. 2026b. Search-P1: Path-centric reward
+shaping for stable and efficient agentic RAG training.
+arXiv:2602.22576.
+Renjun Xu and Yang Yan. 2026. Agent skills for large language models: Architecture, acquisition, security, and the
+path forward. arXiv:2602.12430.
+John Yang, Akshara Prabhakar, Karthik Narasimhan, and
+Shunyu Yao. 2023. InterCode: Standardizing and benchmarking interactive coding with execution feedback. In
+NeurIPS.
+Shunyu Yao, Howard Chen, John Yang, and Karthik
+Narasimhan. 2022. WebShop: Towards scalable realworld web interaction with grounded language agents. In
+NeurIPS.
+
+10
+
+Appendix
+A
+
+Formal definitions
+
+We provide the complete formal specification of the GraSP.
+Definition 2 (Failure Event). A failure event is ϵ = ⟨v, τϵ , mϵ , xt ⟩, where v is the failed node, τϵ ∈
+{precondition, execution, postcondition, timeout}, mϵ is a structured message, and xt
+is the current environment state.
+Definition 3 (Repair Validity). A repair patch G 7→ G′ is valid iff: (1) G′ is acyclic, (2) all new nodes
+correspond to library skills, (3) argument schemas type-check, (4) all affected nodes have verifiers, (5)
+unaffected verified ancestors are unchanged, and (6) |∆V | ≤ Lmax , |∆E| ≤ Emax .
+
+B
+B.1
+
+Additional algorithm details
+Main loop
+
+Algorithm 1 G RA SP Main Loop
+Require: Task q, initial state x0 , skill library L, memory M, thresholds τlow , τhigh
+1: g ← PARSE G OAL(q); x ← x0 ; replans ← 0
+2: while not done do
+3:
+(Ŝ, R, Γ, cret ) ← M EM R ETRIEVAL(q, g, x, L, M)
+4:
+if cret < τlow then return R EACT FALLBACK(q, g, x)
+5:
+end if
+6:
+G ← DAG C OMPILE(q, g, x, Ŝ, R, Γ)
+7:
+if G = ⊥ then return R EACT FALLBACK(q, g, x)
+8:
+end if
+9:
+for all ready node v in topological order of G do
+10:
+if x ̸|= ϕpre
+v or execution fails or νv rejects then
+11:
+ϵ ← failure event
+12:
+(G′ , ok) ← L OCAL R EPAIR(G, ϵ, x, L)
+13:
+if ok then
+14:
+G ← G′ ; reset affected subgraph; continue
+15:
+else if replans < Pmax then
+16:
+replans++; update residual task; break to outer loop
+17:
+elsereturn R EACT FALLBACK(q, gresidual , x)
+18:
+end if
+19:
+else
+20:
+Mark v as verified; update x
+21:
+end if
+22:
+end for
+23:
+if x |= g then return success
+24:
+end if
+25: end while
+B.2
+
+Memory-conditioned retrieval
+
+The retrieval procedure is detailed in Algorithm 2.
+B.3
+
+DAG compilation
+
+The compilation process is detailed in Algorithm 3.
+B.4
+
+Local graph repair
+
+The repair procedure is detailed in Algorithm 4.
+11
+
+Algorithm 2 Memory-Conditioned Skill Retrieval
+Require: Task q, goal g, state x, library L, memory M
+1: R ← T OP K(q, x, M, k)
+2: Γ ← S UMMARIZE(R)
+3: pdir ← BASE R ETRIEVER(q, x, L)
+4: pmem ← M EMORY P RIOR(R, L)
+5: for each s ∈ L do
+6:
+p[s] ← λ · pdir [s] + (1 − λ) · pmem [s]
+7: end for
+8: Ŝ ← T OP M(p, M )
+9: Compute f = [ρ̄, 1 − JSD, p(1) − p(2) , Cover]
+10: c̃ ← σ(w⊤ f + b); cret ← ηc̃ + (1 − η)chist return (Ŝ, R, Γ, cret )
+
+▷ top-k successful memories
+▷ distilled insights
+
+Algorithm 3 DAG Compilation
+Require: Task q, goal g, state x, skills Ŝ, memory R, summary Γ
+1: N ← LLM_P ROPOSE N ODES(q, g, x, Ŝ, Γ)
+2: N ← VALIDATE A ND B IND(N, L, x)
+3: if N is invalid then return ⊥
+4: end if
+5: V ← {vsrc , vsnk } ∪ N ; E ← ∅
+6: for each pair (u, v) ∈ N × N , u ̸= v do
+7:
+if effect–precondition match then
+8:
+E ← E ∪ {(u, state, v)}
+9:
+end if
+10:
+if output–input match then
+11:
+E ← E ∪ {(u, data, v)}
+12:
+end if
+13:
+if memory precedence or resource conflict then
+14:
+E ← E ∪ {(u, order, v)}
+15:
+end if
+16: end for
+17: Resolve cycles; attach verifiers and budgets
+18: if not valid GraSP then return ⊥
+19: end ifreturn G = (V, E)
+
+C
+
+C.1
+
+Ablation experiment design and hyperparameters
+
+Hyperparameters
+
+Table 3 lists the default hyperparameter values used in all experiments unless otherwise stated. Sensitivity
+analyses (§C) sweep a subset of these.
+12
+
+Algorithm 4 Local Graph Repair
+Require: Graph G, failure ϵ, state xt , library L, budget Rmax
+1: vf ← ϵ.node
+2: if repair count of vf ≥ Rmax then return (G, false)
+3: end if
+4: C ← h-hop neighborhood of vf in G
+5: ops ← R ANKO PERATORS(ϵ.type, xt , C, L)
+6: for each operator r in ops do
+7:
+G′ ← r(G, ϵ, xt )
+8:
+if G′ is valid GraSP then return (G′ , true)
+9:
+end if
+10: end forreturn (G, false)
+Table 3: Default hyperparameters for G RA SP. Values are shared across all eight LLM backbones and four
+benchmarks unless stated otherwise.
+
+C.2
+
+Symbol
+
+Description
+
+Default
+
+λ
+k
+M
+η
+τlow
+τhigh
+h
+Lmax
+Emax
+Rmax
+Pmax
+LLM temperature
+Max env steps
+Runs per cell
+
+Direct vs. memory mixing weight (Eq. 2)
+# of top memory records retrieved
+# of skills passed to compilation (top-M )
+Learned vs. historical confidence weight
+Routing threshold to ReAct fallback
+Routing threshold to full DAG with normal repair
+Repair neighborhood radius (hops)
+Max nodes added/changed per repair patch
+Max edges added/changed per repair patch
+Max repair attempts per node
+Max global replans per episode
+Sampling temperature for all backbones
+Per-episode budget (ALFWorld / ScienceWorld / WebShop / InterCode)
+# independent runs averaged in Table 1
+
+0.5
+5
+5
+0.7
+0.40
+0.65
+2
+3
+5
+2
+1
+0.0
+30/40/15/20
+3
+
+Component ablations
+
+We describe the complete set of ablation experiments designed to isolate each component of G RA SP,
+summarised quantitatively in Table 2:
+1. G RA SP w/o Experience Memory: Remove the memory-induced skill distribution pmem and experience summary Γ, using only pdir for retrieval. This isolates the contribution of episodic grounding.
+2. G RA SP w/o DAG Structure: Execute retrieved skills as a flat sequence (in the order proposed by
+the LLM) rather than a typed DAG. This removes dependency tracking and partial execution.
+3. G RA SP w/o Local Repair: Disable all repair operators. When a node fails, immediately escalate
+to global replan or ReAct fallback. This isolates the contribution of locality-bounded repair.
+4. G RA SP w/o Confidence Routing: Remove the routing mechanism and always execute the GraSP
+regardless of cret . This tests whether adaptive control improves robustness.
+5. G RA SP w/ Global Replan: Replace local repair with global replanning that discards the entire
+graph and recompiles from scratch on any failure. Same repair budget (number of replan attempts)
+is allocated. This directly compares local vs. global repair strategies.
+C.3
+
+Sensitivity analyses
+
+1. Confidence threshold sweep: Vary τlow and τhigh independently and report success rate and fallback frequency. This tests routing robustness.
+13
+
+2. Repair budget sweep: Vary Rmax ∈ {0, 1, 2, 3, 5} and report success rate and average steps. This
+determines the optimal repair investment.
+3. Memory size k: Vary k ∈ {0, 1, 3, 5, 10} and measure retrieval confidence and downstream success. This tests memory contribution.
+4. Skill library quality: Artificially degrade the skill library (remove 25%, 50% of skills) and measure
+G RA SP’s robustness compared to baselines.
+
+D
+
+Per-task-type breakdown
+
+Table 4 presents the per-task-type breakdown for ALFWorld using DeepSeek V3.2. G RA SP achieves
+improvements across all 6 task types, with the largest gains on multi-step tasks (Clean, Heat) where skill
+DAG structure provides the most benefit.
+Table 4: ALFWorld per-task-type SR (%) on the seen split using DeepSeek V3.2.
+Method
+
+Pick
+
+Clean
+
+Heat
+
+Cool
+
+Examine
+
+Place
+
+Avg
+
+ReAct
+ExpeL
+G RA SP
+
+71.2
+73.0
+84.6
+
+58.9
+61.2
+76.7
+
+61.4
+64.7
+80.1
+
+71.0
+69.1
+80.8
+
+67.5
+70.4
+83.4
+
+65.7
+66.7
+76.1
+
+66.5
+67.9
+80.6
+
+∆ vs ExpeL
+
++11.6
+
++15.5
+
++15.4
+
++11.7
+
++13.0
+
++9.4
+
++12.7
+
+Table 5 shows results for 6 representative ScienceWorld task categories (out of 30 total). G RA SP
+consistently improves on ExpeL, particularly for multi-step experimental procedures (Heating, Mixing)
+that benefit from DAG-structured execution with repair.
+Table 5: ScienceWorld per-category reward (seen split) for 6 representative task categories using DeepSeek
+V3.2.
+
+E
+
+Method
+
+Boil
+
+Melt
+
+Freeze
+
+Mix
+
+Measure
+
+Grow
+
+ReAct
+ExpeL
+G RA SP
+
+73.8
+78.1
+88.0
+
+68.4
+73.0
+83.7
+
+71.7
+76.4
+86.3
+
+64.5
+70.0
+81.5
+
+70.9
+75.8
+85.0
+
+67.5
+73.6
+82.7
+
+Case study: heating a potato in ALFWorld
+Case Study: Heat some potato and put it in countertop (ALFWorld)
+Step 1: Retrieval. Given the task and initial observation (“You are in the middle of a room...”), memory-conditioned
+retrieval returns four candidate skills (cret = 0.82):
+• find-object(obj=potato)
+• pick-up(obj=potato)
+• heat-object(obj=potato, appliance=microwave)
+• place-object(obj=potato, target=countertop)
+Step 2: DAG Compilation.
+order
+
+state
+
+data
+
+state
+
+order
+
+src −−−→ find −−→ pick-up −−→ heat −−→ place −−−→ snk
+Edge types: find→pick-up = state (object must be visible); pick-up→heat = data (held object as input);
+heat→place = state (object must be hot).
+Step 3: Execution with failure and repair.
+1. find-object: navigates, finds potato on countertop 2. ✓
+2. pick-up: “take potato 1 from countertop 2”. ✓
+3. heat-object: FAIL — precondition violated: microwave is closed.
+
+14
+
+⇒ Local repair: I NSERT P REREQ inserts open-receptacle(microwave) before heat-object.
+4. open-receptacle: “open microwave 1”. ✓
+5. heat-object (retry): “heat potato 1 with microwave 1”. ✓
+6. place-object: “put potato 1 in/on countertop 1”. ✓ Task complete.
+Comparison. ReAct required 18 steps and failed on roughly 38% of Heat tasks (Table 4: SR 61.4%). ExpeL sometimes
+recovers via reflection but needs an extra episode. G RA SP resolved the failure with 1 inserted node, completing in 8 total
+steps—the typed state edge pinpointed exactly which precondition was missing.
+
+F
+
+Prompts
+
+We provide the key prompts used in G RA SP’s core stages, corresponding to the implementation in
+src/esg.py. Variables in braces are filled at runtime.
+Prompt 1: DAG Compilation (DAG_COMPILATION_PROMPT)
+You are an expert task planner that decomposes complex tasks into a structured
+skill DAG (Directed Acyclic Graph).
+## Task
+{task}
+## Available Skills
+{skill_summaries}
+{action_grammar}
+{contrastive_guidance}
+## Instructions
+Decompose this task into a DAG of subtasks. Each subtask should:
+1. Map to one of the available skills (or be a basic action sequence)
+2. Have a clear postcondition (what observation confirms success)
+3. Include conditional branches where the outcome is uncertain
+Output the DAG in this EXACT JSON format:
+{“type”: “sequence”, “children”: [{“type”: “subtask”, “node_id”: “step_1”,
+“skill_name”: “...”, “action_steps”: [...], “postcondition”: “...”}, ...]}
+Rules:
+- Keep total action steps ≤ 20 for simple tasks, ≤ 30 for complex tasks
+- Every subtask MUST have a postcondition
+- Use conditional nodes when an action’s outcome is uncertain
+- Follow the action grammar EXACTLY in action_steps
+Prompt 2: Local Repair (repair_prompt())
+System: You are a Senior Systems Architect specializing in error recovery and
+adaptive planning for interactive task execution.
+A task execution has encountered a failure at one step. Your job is to diagnose
+the failure and repair the procedure while preserving all progress.
+{action_grammar}
+{contrastive_guidance}
+## Context
+1. Original Task: {task}
+2. Overall Procedure: {overall_procedure}
+3. Failed Step (#{step_index}): {failed_step_text}
+4. Failure Type: {failure_type}
+5. Error Information: {error_message}
+6. Current State: {state_summary}
+7. Remaining Steps: {remaining_steps}
+## Repair Strategy Hint
+Recommended: {repair_op_hint}
+- REBIND: Adjust parameters/objects of the failed step
+- INSERT_PREREQ: Add a missing prerequisite step
+- SUBSTITUTE: Replace with an alternative approach
+- REWIRE: Reorder or reconnect steps
+- BYPASS: Skip if the goal is already achieved
+Output:
+
+15
+
+<Diagnosis> root cause </Diagnosis>
+<Repair_Strategy> operator </Repair_Strategy>
+<Repaired_Procedure> full repaired procedure </Repaired_Procedure>
+Prompt 3: Postcondition Verification (POSTCONDITION_CHECK_PROMPT)
+Given the following context, determine if the subtask’s postcondition has been
+met.
+## Subtask
+{node_description}
+## Expected Postcondition
+{postcondition}
+## Recent Observations (last {window} steps)
+{observations}
+Answer with EXACTLY one of:
+- SATISFIED -- the postcondition is clearly met
+- NOT_SATISFIED -- the postcondition is not met yet
+- UNCERTAIN -- cannot determine from observations
+<Verdict> your answer here </Verdict>
+
+G
+
+Broader impacts
+
+G RA SP is a research framework for improving LLM agent reliability. It does not introduce new capabilities for harmful applications beyond those already present in the underlying LLMs. By making agent
+execution more structured and verifiable, G RA SP may contribute to safer agent deployment through
+improved interpretability (explicit execution graphs) and controllability (confidence-based routing and
+repair bounds). We do not foresee significant negative societal impacts specific to this work.
+
+16
+
+

@@ -1,0 +1,219 @@
+% ============================================================================
+% Chapter 5: Implementation and Experimental Setup
+% ============================================================================
+\chapter{Implementation and Experimental Setup}
+\label{ch:implementation}
+
+\section{Technology Stack}
+
+CBSR is implemented in Python 3.9 using the following core libraries:
+\begin{itemize}
+\item \textbf{Tigramite 5.x}: PCMCI causal discovery with RobustParCorr (MCD-based partial correlation).
+\item \textbf{NumPy / SciPy}: Numerical computation, statistical functions, and CDF evaluations.
+\item \textbf{PyTorch 2.0}: LSTM Autoencoder for Temporal State Reasoning ($R_T$).
+\item \textbf{Scikit-Learn 1.3}: Behavioral Pattern Reasoner (Random Forest) and stacked meta-learner (Logistic Regression).
+\item \textbf{Pandas}: Data ingestion and provenance edge preprocessing.
+\end{itemize}
+
+The complete implementation resides in two primary source files:
+\texttt{zerocausal\_core.py} ($\approx$62\,KB) — core module containing all algorithms; and
+\texttt{15\_beat\_papers\_evaluation.py} ($\approx$28\,KB) — end-to-end evaluation pipeline.
+
+
+\section{Benchmark Datasets}
+\label{sec:datasets}
+
+CBSR is evaluated on five diverse provenance-based IDS benchmarks spanning simulated and
+real-world enterprise environments. Table~\ref{tab:datasets} summarizes the key statistics.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Benchmark dataset statistics. Windows are non-overlapping time slices of width $W$.
+Train/Val/Test follow a strict 50\%/20\%/30\% chronological split.}
+\begin{tabularx}{\linewidth}{Xrrrcrrr}
+\toprule
+\textbf{Dataset} & \textbf{Total} & \textbf{Train} & \textbf{Val} & \textbf{Test}
+                 & \textbf{Attacks} & $d$ & $W$ \\
+\midrule
+DARPA TC3      & 399   & 200 & 80  & 119 & 134 & 23  & 1\,s \\
+NODLINK        & 399   & 200 & 80  & 119 & 119 & 23  & 1\,s \\
+BETH (Sysdig)  & 539   & 270 & 108 & 161 &   2 & 882 & 10\,s \\
+DARPA OpTC     & 546   & 273 & 109 & 164 &  50 & 130 & 1\,s \\
+StreamSpot     & 37{,}614 & 18{,}807 & 7{,}523 & 11{,}284 & 2{,}843 & 82 & --- \\
+\bottomrule
+\end{tabularx}
+\label{tab:datasets}
+\end{table}
+
+\begin{itemize}
+\item \textbf{DARPA TC3} (DARPA ENGAGE): A simulated Windows enterprise APT campaign with
+  multi-stage attack chains --- persistence, lateral movement, credential dumping, and
+  exfiltration. The provenance graph covers 23 unique edge types (process--file,
+  process--network, process--process). AUC target: 0.9837.
+
+\item \textbf{NODLINK} (DARPA NODLINK): A simulated campus-network APT trace captured via
+  Linux audit logging. Attack stages include initial compromise, privilege escalation, and
+  data exfiltration. Identical dimensionality to TC3 ($d = 23$) due to shared simulation
+  infrastructure. AUC target: 0.9784.
+
+\item \textbf{BETH} (USENIX ATC'22): Real-world Linux host telemetry captured via sysdig
+  across 8 physical hosts, of which 3 experienced active red-team attacks. The dataset has
+  $d = 882$ unique syscall-derived edge types and only 2 labeled attack windows in the test
+  partition, making it an extremely imbalanced detection challenge. AUC target: 0.9901.
+
+\item \textbf{DARPA OpTC}: Real DARPA enterprise APT evaluation across a live Windows
+  environment of 500+ hosts. The provenance graph captures 130 unique edge types.
+  50 attack-labeled windows are present in the full evaluation trace. AUC target: 0.9628.
+
+\item \textbf{StreamSpot}: A graph-stream benchmark containing 600 heterogeneous provenance
+  graphs across 6 distinct workload types (YouTube, GMail, download, VGame, system, attack).
+  The attack class (100 graphs) is embedded in the StreamSpot-B split. With 37,614
+  temporal windows at $d = 82$ edge types, it is the largest benchmark and the hardest due
+  to workload heterogeneity. AUC target: 0.6909.
+\end{itemize}
+
+
+\section{Experimental Protocol}
+\label{sec:protocol}
+
+\subsection{Hardware and Software Environment}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Hardware and software environment.}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Specification} \\
+\midrule
+Processor    & Intel Xeon E5-2698 v4, 20 cores @ 2.2\,GHz \\
+Memory       & 128\,GB DDR4 ECC \\
+Storage      & 2\,TB NVMe SSD \\
+GPU          & NVIDIA Tesla V100 (32\,GB) — used for LSTM-AE training only \\
+OS           & Ubuntu 20.04 LTS (Linux kernel 5.4.0) \\
+Python       & 3.9.18 \\
+CUDA         & 11.8 (PyTorch 2.0.1+cu118) \\
+\bottomrule
+\end{tabular}
+\label{tab:hardware}
+\end{table}
+
+\subsection{Chronological Data Partitioning}
+
+All experiments use a strict chronological 50\%/20\%/30\% three-way split to prevent
+future-leakage, as required by any realistic streaming IDS evaluation:
+
+\begin{enumerate}
+\item \textbf{Train Proper (50\%)}: Used exclusively for unsupervised RobustParCorr causal
+  discovery, SCM regression fitting ($\beta_{i,j}$), and LSTM Autoencoder pre-training on
+  normal-period state sequences. No labels or attack-free guarantees are assumed.
+
+\item \textbf{Validation (50\%--70\%)}: Provides the labeled partition on which the
+  Behavioral Pattern Reasoner (BPR) and stacked meta-learner are supervised. Conformal
+  calibration scores are also initialized here.
+
+\item \textbf{Test (final 30\%)}: Strictly held out. Streaming risk inference with online
+  conformal alerting is performed window-by-window; final AUC-ROC and FPR@95\%TPR metrics
+  are computed on this partition only.
+\end{enumerate}
+
+\subsection{Reproducibility and Confidence Estimation}
+
+All experiments are repeated across \textbf{5 random seeds} (42--46) that control LSTM-AE
+initialization and RF training stochasticity. Mean AUC and 95\% confidence intervals
+($\pm$1.96$\times$std) are reported. PCMCI causal discovery is cached per
+\texttt{(dataset, seed, $\alpha$, $\tau_{\max}$)} to eliminate redundant computation across
+evaluation runs.
+
+\subsection{Evaluation Metrics}
+
+\begin{itemize}
+\item \textbf{AUC-ROC}: The primary metric; measures discrimination across all thresholds.
+  Preferred over accuracy due to high class imbalance in all five benchmarks.
+\item \textbf{FPR@95\%TPR}: The false positive rate when the detection threshold is set to
+  achieve 95\% recall. This is the primary operational metric for a deployed IDS, where missing
+  an attack (low TPR) is unacceptable.
+\item \textbf{Conformal FPR}: Empirical false alarm rate under online conformal alerting at
+  target $\alpha = 5\%$, reported in the noise and drift robustness analyses.
+\end{itemize}
+
+
+\section{Operator Architecture Details}
+
+\textbf{Temporal State Reasoning (LSTM-AE):} Encoder LSTM (12-dim $\to$ 32-dim hidden) and
+Decoder LSTM (32-dim $\to$ 12-dim output), trained for 60 epochs with Adam ($\text{lr} =
+5 \times 10^{-4}$, batch size 64) on sequences of $k = 8$ consecutive normal-period state
+vectors from the Train Proper partition.
+
+\textbf{Behavioral Pattern Reasoner (BPR):} Random Forest with 300 decision trees, maximum
+depth 10, and Gini impurity criterion, trained on the 12-dimensional state coordinates from
+the Validation partition with corresponding binary attack labels.
+
+\textbf{Calibrated Meta-Learner:} Logistic Regression with L2 regularization ($C = 1.0$),
+fitted on the Validation partition's three reasoning operator outputs ($R_L$, $R_T$, $R_B$)
+and labels. A rolling queue of $M = 245$ calibration scores is maintained online for
+conformal p-value computation.
+
+
+\section{Performance Optimizations}
+
+When initially profiled, the streaming loop required 240\,s to process 546 windows on OpTC
+($\approx$440\,ms/window). Three targeted optimizations achieved a \textbf{13$\times$ speedup}:
+
+\textbf{NumPy Matrix Indexing.} Pandas \texttt{.iloc} calls inside the sliding window loop
+added $\approx$200\,$\mu$s/access. Solution: pre-convert dataframes to 2D NumPy matrices and
+map column names to integer offsets:
+\begin{lstlisting}
+data_arr = ts.values.astype(float)       # (N, d) matrix
+col_idx = {c: i for i, c in enumerate(ts.columns)}
+\end{lstlisting}
+
+\textbf{Binary Search Conformal Lookup.} The original $O(M)$ scan of $M = 245$ calibration
+scores was replaced with a sorted array and $O(\log M)$ binary search:
+\begin{lstlisting}
+calib_sorted = np.sort(calib_array)
+rank = np.searchsorted(calib_sorted, score, side='right')
+pval = (M - rank + 1) / (M + 1)
+\end{lstlisting}
+
+\textbf{Vectorized Empirical CDF.} Per-step SciPy CDF evaluations replaced with batch NumPy
+operations, eliminating Python interpreter overhead inside the hot loop.
+
+
+\section{Inference Latency}
+
+These optimizations reduce total processing time from 240\,s to 18.03\,s on OpTC
+($<$33.4\,ms/window for causal scoring). The full CBSR hybrid ensemble (three reasoning
+operators + meta-fusion + conformal lookup) then runs at \textbf{1.35--1.71\,ms/window}
+across all benchmarks (Table~\ref{tab:runtime}) --- well below the 1-second streaming window.
+
+\begin{table}[htbp]
+\centering
+\caption{CBSR hybrid ensemble inference latency per streaming window.}
+\begin{tabular}{lc}
+\toprule
+\textbf{Dataset} & \textbf{Avg Inference (ms)} \\
+\midrule
+TC3        & 1.705 \\
+NODLINK    & 1.366 \\
+BETH       & 1.351 \\
+OpTC       & 1.354 \\
+StreamSpot & 1.703 \\
+\bottomrule
+\end{tabular}
+\label{tab:runtime}
+\end{table}
+
+PCMCI discovery scales as $O(d^2 \tau_{\max} T)$ in practice. On BETH ($d = 882$, $T = 270$
+training windows), the one-time offline discovery completes in $\approx$7,842\,s and is cached
+via \texttt{.pkl} for all subsequent seed runs. For $d > 500$, a variance-thresholding pre-pass
+reduces effective dimensionality to maintain sub-hour startup. The figure below plots discovery
+time (log scale) and per-window latency as functions of $d$: discovery grows as $O(d^2)$ while
+inference latency stays constant at $\approx$1.4\,ms regardless of $d$.
+
+\begin{center}
+\includegraphics[width=0.56\linewidth]{dimensionality_vs_latency.png}
+\captionof{figure}{PCMCI discovery time and streaming inference latency vs.\ $d$.}
+\label{fig:scalability}
+\end{center}

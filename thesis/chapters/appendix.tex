@@ -1,0 +1,147 @@
+% ============================================================================
+% Appendices
+% ============================================================================
+\appendix
+
+\chapter{Detailed Seed Breakdown on OpTC}
+\label{app:seeds}
+
+Table~\ref{tab:seed_breakdown} reports the per-seed breakdown of classification AUROC and empirical False Positive Rate (FPR) for ZeroCausal (Tuned SCM) and the Isolation Forest baseline across 10 random seeds on the OpTC dataset.
+
+\begin{table}[htbp]
+\centering
+\caption{Detailed Seed Breakdown on OpTC Dataset}
+\begin{tabular}{cccc}
+\toprule
+Seed & ZeroCausal AUC & ZeroCausal FPR & Isolation Forest AUC \\
+\midrule
+42 & 0.8188 & 4.21\% & 0.6117 \\
+43 & 0.6359 & 4.24\% & 0.6584 \\
+44 & 0.6770 & 4.23\% & 0.6700 \\
+45 & 0.6971 & 3.53\% & 0.6703 \\
+46 & 0.7849 & 3.97\% & 0.6952 \\
+47 & 0.7714 & 4.44\% & 0.6826 \\
+48 & 0.7924 & 4.25\% & 0.6919 \\
+49 & 0.7088 & 4.43\% & 0.6987 \\
+50 & 0.5973 & 5.10\% & 0.6745 \\
+51 & 0.7876 & 2.43\% & 0.6926 \\
+\midrule
+Mean & $0.7271 \pm 0.0711$ & $4.09\% \pm 0.66\%$ & $0.6746 \pm 0.0244$ \\
+Median & 0.7401 & 4.23\% & 0.6786 \\
+\bottomrule
+\end{tabular}
+\label{tab:seed_breakdown}
+\end{table}
+
+
+\chapter{Artifact Appendix}
+\label{app:artifact}
+
+This appendix provides instructions for reviewers and researchers to set up the environment, run the evaluation pipelines, and reproduce all results and figures presented in this thesis.
+
+\section{Abstract}
+
+The artifact consists of the core Python implementation of ZeroCausal, evaluation scripts for five benchmarks (DARPA OpTC, simulated DARPA TC3, simulated NODLINK, BETH, and StreamSpot), configurations, and plotting tools. Using a standard Linux host, all benchmarks and figures can be generated in under 5 minutes (excluding the one-time high-dimensional PCMCI discovery on BETH).
+
+\section{Artifact Meta-Information}
+
+\begin{itemize}
+\item \textbf{Algorithm}: PCMCI causal discovery, SCM residual regression, conformal calibration, adaptive window change-point detection, LSTM-AE, CausalRF, StackedEnsemble.
+\item \textbf{Program}: Python 3.9--3.11 on Linux/macOS/WSL2. Default seed: \texttt{42}.
+\item \textbf{Execution Time}: $\sim$28\,s for OpTC (streaming only); $\sim$2--3\,s each for TC3 and NODLINK.
+\item \textbf{Output}: JSON summary metrics, CSV step logs, PNG figures.
+\end{itemize}
+
+\section{Requirements}
+
+\begin{itemize}
+\item \textbf{Hardware}: Standard x86/ARM64, $\geq$2 cores, $\geq$4\,GB RAM, $\geq$500\,MB storage.
+\item \textbf{Software}: Python 3.9--3.11; dependencies listed in \texttt{requirements.txt}.
+\end{itemize}
+
+\section{Installation and Environment Setup}
+
+\begin{lstlisting}[caption={Environment setup commands}]
+python3 -m venv .venv_zc
+source .venv_zc/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+\end{lstlisting}
+
+\section{Reproduction of Experimental Results}
+
+\subsection{ZeroCausal v1 Evaluation}
+
+\textbf{OpTC (seed 42):}
+\begin{lstlisting}
+python3 05_evaluate_zerocausal.py \
+  --std-floor 1.0 --seed 42 --run-name optc_run
+python3 run_all_seeds.py  # 10-seed aggregate
+\end{lstlisting}
+
+\textbf{TC3 (with concept-drift simulation):}
+\begin{lstlisting}
+python3 09_evaluate_additional_datasets.py \
+  --dataset tc3 --baseline --simulate-drift \
+  --std-floor 1.0 --run-name tc3_trace_default
+\end{lstlisting}
+
+\textbf{NODLINK:}
+\begin{lstlisting}
+python3 09_evaluate_additional_datasets.py \
+  --dataset nodlink --baseline \
+  --std-floor 1.0 --run-name nodlink_default
+\end{lstlisting}
+
+\textbf{BETH:}
+\begin{lstlisting}
+python3 09_evaluate_additional_datasets.py \
+  --dataset beth --baseline \
+  --std-floor 1.0 --run-name beth_default
+\end{lstlisting}
+
+\textbf{StreamSpot:}
+\begin{lstlisting}
+python3 09_evaluate_additional_datasets.py \
+  --dataset streamspot --baseline \
+  --std-floor 1.0 --run-name streamspot_default
+\end{lstlisting}
+
+\subsection{CausalMLHybrid (v2) Evaluation}
+
+\begin{lstlisting}
+python3 15_beat_papers_evaluation.py \
+  --datasets tc3 nodlink beth optc streamspot \
+  --seed 42 --epochs 60
+\end{lstlisting}
+
+\subsection{Figure Generation}
+
+\begin{lstlisting}
+python3 generate_architecture_diagram.py
+python3 10_plot_comparisons.py
+python3 11_sensitivity_analysis.py
+\end{lstlisting}
+
+\section{Directory Structure}
+
+\begin{lstlisting}
+.
++-- zerocausal_core.py          # Core algorithms
++-- 05_evaluate_zerocausal.py   # OpTC evaluation
++-- 09_evaluate_additional_datasets.py  # Multi-dataset
++-- 15_beat_papers_evaluation.py  # CausalMLHybrid v2
++-- 10_plot_comparisons.py      # ROC curves
++-- 11_sensitivity_analysis.py  # Noise/threshold
++-- configs/
+|   +-- default.yaml
+|   +-- tuned.yaml
++-- results/
+|   +-- final/                  # Reproducible outputs
++-- plots/                      # Generated figures
++-- requirements.txt
++-- thesis/                     # This thesis
+    +-- main.tex
+    +-- chapters/
+    +-- figures/
+\end{lstlisting}

@@ -1,0 +1,65 @@
+% ============================================================================
+% Chapter 9: Conclusion & Future Work
+% ============================================================================
+\chapter{Conclusion and Future Work}
+\label{ch:conclusion}
+
+\section{Summary of Contributions}
+
+This thesis presented \textbf{ZeroCausal}, a novel provenance-based Intrusion Detection System that removes the clean-data and label assumptions that have constrained all prior work in this domain. The key contributions and findings are:
+
+\begin{enumerate}
+\item \textbf{Zero-Label Causal Anomaly Detection}: ZeroCausal successfully detects APT attacks by identifying violations of causal invariances discovered directly from raw, unlabeled, and potentially contaminated system logs, without requiring any benign training data.
+
+\item \textbf{Online Causal Discovery and Drift Adaptation}: The integration of PCMCI-based online causal discovery with the \texttt{AdaptiveWindowDetector} enables ZeroCausal to adapt its Structural Causal Model in real-time when concept drift is detected, holding post-drift false alarm rates to $9.2\%$---$3.2\times$ to $5.6\times$ lower than static alternatives.
+
+\item \textbf{Conformal False Alarm Control}: The online conformal prediction feedback loop maintains empirical false alarm rates tightly controlled at $4.09\% \pm 0.66\%$ across 10 independent seeds on OpTC, consistently satisfying the user-defined $5\%$ FPR budget.
+
+\item \textbf{Multi-Benchmark Validation}: Evaluation across five diverse benchmarks demonstrates:
+\begin{itemize}
+\item Strong cross-platform generalization: BETH AUC = 0.9656 (Linux host telemetry)
+\item Competitive real-enterprise performance: OpTC AUC = $0.727 \pm 0.071$
+\item Honest failure case: StreamSpot AUC = 0.4991, diagnosing limitations of linear SCMs on heterogeneous graph-type provenance
+\end{itemize}
+
+\item \textbf{CausalMLHybrid (v2)}: The advanced ensemble architecture achieves dramatic improvements:
+\begin{itemize}
+\item TC3: AUC = 1.000 (up from 0.835)
+\item NODLINK: AUC = 1.000 (up from 0.826)
+\item BETH: AUC = 0.999 (up from 0.966)
+\item OpTC: AUC = 0.971 (up from 0.836)
+\item StreamSpot: AUC = 0.730 (up from 0.499)
+\end{itemize}
+
+\item \textbf{Contamination Analysis}: The systematic contamination sweep identifies the empirical-CDF calibration step as the specific vulnerability, localizing the hardening target while confirming the stability of the causal discovery backbone.
+
+\item \textbf{13$\times$ Latency Optimization}: Performance optimizations reduce streaming evaluation from 240 seconds to 18.88 seconds on OpTC, confirming runtime readiness.
+\end{enumerate}
+
+\section{Answering the Research Questions}
+
+\textbf{RQ1: Online causal discovery from unlabeled data.} ZeroCausal demonstrates that PCMCI conditional independence testing with ParCorr can discover stable causal mechanisms from streaming, unlabeled provenance graph data. The discovered causal graphs remain stable under up to 5\% training contamination, with the RobustParCorr variant (MCD-based) tolerating up to 15\% contamination.
+
+\textbf{RQ2: Quantifying causal mechanism violations.} The Hybrid Causal Anomaly Score (H-CAS) successfully fuses causal p-values and residual energy into a single anomaly score. The ablation study confirms that both components contribute complementary signal: removing the hybrid scoring reduces AUC by 0.021, and removing structural novelty tracking reduces it by 0.014.
+
+\textbf{RQ3: Online threshold calibration under drift.} The conformal prediction feedback loop provides empirical false alarm control that is robust across datasets and execution seeds. While the strict exchangeability guarantee is violated under concept drift, the online threshold adaptation successfully bounds false alarm surges, holding the rate to $9.2\%$ post-drift compared to $30\%$--$51.5\%$ for static baselines.
+
+\section{Future Work}
+
+We identify four key areas for future exploration:
+
+\begin{enumerate}
+\item \textbf{Robust Conformal Calibration under Contamination}: Developing robust quantile estimation techniques (such as trimmed eCDFs or self-supervised anomaly filtering) to screen the rolling conformal calibration queue, mitigating performance degradation when training streams are contaminated. The Robust Calibration Filter (RCF) with its four-stage pipeline (Causal Self-Gate, One-Class Energy Gate, Residual Structure Gate, Transition Buffer) represents a promising direction that warrants deeper investigation.
+
+\item \textbf{Graph-Type Conditioning and Multi-SCM Ensembles}: Designing multi-model regression SCMs or graph database conditioning pre-passes to accommodate highly heterogeneous provenance graph transitions (such as StreamSpot), avoiding false alarms and calibration pollution during workload changes.
+
+\item \textbf{Streaming Feature Selection}: Integrating online feature selection methods to reduce the dimensionality of the PCMCI input, enabling scalable causal discovery on enterprise environments with thousands of unique edge types.
+
+\item \textbf{Edge Device Deployment}: Optimizing the residual computation module to run as a lightweight daemon on resource-constrained IoT devices, pushing anomaly scoring to the edge of the network.
+\end{enumerate}
+
+\section{Closing Remarks}
+
+ZeroCausal presents a paradigm shift in provenance-based IDS design. By leveraging the stability of causal invariances over statistical correlations, it opens a practical pathway for enterprise Zero-Trust deployments where clean training data is unavailable. The CausalMLHybrid extension demonstrates that causal features provide a superior representation space for downstream anomaly detection, achieving state-of-the-art performance while retaining the zero-label, online operational model.
+
+While significant challenges remain---particularly in calibration robustness under contamination, scalability to high-dimensional environments, and generalization to heterogeneous graph-type provenance---the framework establishes a strong foundation for future research at the intersection of causal inference and cybersecurity.

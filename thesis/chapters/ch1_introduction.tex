@@ -1,0 +1,125 @@
+% ============================================================================
+% Chapter 1: Introduction
+% ============================================================================
+\chapter{Introduction}
+\label{ch:introduction}
+
+\section{Background and Motivation}
+
+Advanced Persistent Threats (APTs) are stealthy, multi-stage cyber campaigns that compromise
+enterprise systems over extended periods. Unlike commodity malware that executes a single payload
+and terminates, APTs establish persistent footholds, conduct lateral movement, escalate
+privileges, and exfiltrate sensitive data over weeks or months. Because APTs execute
+benign-looking commands and proceed through multi-hop lateral movements, traditional
+signature-based security systems are ineffective against them.
+
+Host audit logging and provenance graph analysis have emerged as powerful paradigms for APT
+detection. A provenance graph models system events (e.g., file reads, process spawns, network
+flows) as directed edges between system entities (processes, files, network sockets), preserving
+the complete causal history of system execution.
+
+Despite their potential, existing state-of-the-art provenance-based IDS---such as
+OCR-APT~\cite{ocrapt2025}, TraceCluster~\cite{tracecluster2026}, and
+StageFinder~\cite{stagefinder2026}---share a \textbf{fatal limitation: the clean-data
+assumption}. They require a pristine benign period or fully labeled training dataset. This
+assumption fails in practice for four fundamental reasons:
+
+\begin{enumerate}[leftmargin=2cm]
+\item \textbf{Stealthy Contamination}: Attackers may already be active when auditing begins,
+    corrupting the normal training data.
+\item \textbf{Concept Drift}: Enterprise systems naturally evolve due to software updates,
+    new administrative activities, and infrastructure changes, making static models obsolete.
+\item \textbf{Explosive Log Volumes}: The DARPA OpTC dataset alone contains over 17 million
+    provenance edges. Manual labeling is economically intractable.
+\item \textbf{False Positive Fatigue}: Static anomaly scoring lacks statistical controls on
+    alarm rates, overwhelming analysts with false alerts.
+\end{enumerate}
+
+These challenges collectively form the \textit{clean-data deployment bottleneck}---a
+fundamental barrier that prevents provenance-based IDS from transitioning from laboratory
+research to practical enterprise deployment.
+
+\section{Research Problem}
+
+The central research question addressed in this thesis is:
+
+\begin{quote}
+\textit{Can we detect APT attacks by identifying violations of causal invariances discovered
+directly from raw, unlabeled, and potentially contaminated system logs---without requiring any
+benign training data and with provable false-alarm controls?}
+\end{quote}
+
+This question encapsulates three interlinked sub-problems:
+\begin{enumerate}
+\item \textbf{RQ1}: How can stable causal mechanisms be discovered online from streaming,
+    unlabeled provenance data without assuming the training data is clean?
+\item \textbf{RQ2}: How can deviations from these mechanisms be projected into a rich
+    behavioral state representation for multi-perspective threat reasoning?
+\item \textbf{RQ3}: How can detection thresholds be calibrated online to provide empirical
+    false-alarm control under concept drift and training contamination?
+\end{enumerate}
+
+\section{Proposed Solution: CBSR}
+
+To address these challenges, we propose \textbf{Causal Behavioral State Reasoning (CBSR)},
+a framework that detects APT attacks using uncurated streaming data with no manual labels and
+no offline retraining.
+
+Our core insight is that \textbf{causal relationships are more stable than statistical
+correlations}. While statistical distributions of events vary over time due to concept drift,
+the underlying causal equations governing system execution remain invariant. An APT attack
+violates these learned causal mechanism equations by injecting novel relationships (e.g., a
+Word document spawning PowerShell) or altering the dependencies between processes and files.
+
+Rather than relying solely on noisy individual causal residuals, CBSR projects SCM outputs
+into a formal 12-dimensional \emph{Behavioral State Space} and analyzes this state space
+from three complementary perspectives: instantaneous mechanism violations ($R_L$), temporal
+sequence patterns ($R_T$), and behavioral manifold geometry ($R_B$). Their outputs are fused
+via a calibrated meta-learner and constrained by online conformal prediction.
+
+\section{Thesis Contributions}
+
+The key contributions of this thesis are:
+
+\begin{enumerate}
+\item \textbf{Causal Behavioral State Space}: A formal 12-dimensional state representation
+    derived from online SCM invariants, organized into five coordinate groups (Structural
+    Consistency, Activity Dynamics, Behavioral Complexity, Mechanism Violation, Intervention
+    Locality) to capture diverse manifestations of APT behavior.
+
+\item \textbf{Causal Intervention Score (CIS)}: A novel graph-boundary metric grounded in
+    spectral graph theory that quantifies multi-hop violation propagation, providing principled
+    separation between localized administrative noise and multi-stage APT lateral movement.
+
+\item \textbf{Multi-Perspective Parallel Reasoning}: A three-operator architecture ($R_L$,
+    $R_T$, $R_B$) that analyzes the same behavioral state from local, temporal, and
+    behavioral perspectives simultaneously, resolving the model-mismatch failures of pure
+    causal detectors.
+
+\item \textbf{Calibrated Risk Inference with Conformal Guarantees}: A stacked meta-fusion
+    layer with online conformal prediction that delivers distribution-free FPR bounds and
+    adapts to concept drift via change-point-triggered queue flushing.
+
+\item \textbf{Multi-Benchmark Validation}: Evaluation on five diverse benchmarks (DARPA OpTC,
+    BETH, StreamSpot, TC3, NODLINK) demonstrating AUC of 0.9628 on real enterprise Windows
+    logs, AUC 0.9901 on Linux sysdig telemetry, AUC 0.9837/0.9784 on simulated APT datasets,
+    and a 13$\times$ runtime speedup enabling real-time streaming deployment.
+\end{enumerate}
+
+\section{Thesis Organization}
+
+The remainder of this thesis is organized as follows:
+\begin{itemize}
+\item \textbf{Chapter~\ref{ch:literature}}: Reviews provenance-based IDS, causal anomaly
+    detection methods, and conformal prediction, identifying the research gaps that CBSR
+    addresses.
+\item \textbf{Chapter~\ref{ch:threat_model}}: Defines the adversary model and security
+    assumptions.
+\item \textbf{Chapter~\ref{ch:design}}: Presents the complete CBSR system architecture and
+    formal design.
+\item \textbf{Chapter~\ref{ch:implementation}}: Describes implementation details and
+    performance optimizations.
+\item \textbf{Chapter~\ref{ch:evaluation}}: Reports experimental results across five benchmarks.
+\item \textbf{Chapter~\ref{ch:conclusion}}: Discusses limitations, summarizes contributions,
+    and outlines future work.
+\end{itemize}

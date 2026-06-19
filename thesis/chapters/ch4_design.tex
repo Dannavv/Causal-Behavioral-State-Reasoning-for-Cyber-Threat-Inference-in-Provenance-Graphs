@@ -1,0 +1,242 @@
+% ============================================================================
+% Chapter 4: System Design — Causal Behavioral State Reasoning
+% ============================================================================
+\chapter{System Design}
+\label{ch:design}
+
+The CBSR framework projects streaming provenance graph telemetry into a multidimensional
+behavioral state space and infers latent threat risks via multi-perspective reasoning.
+The system operates across four core layers: (1) Robust Causal Discovery \& Behavioral State
+Projection, (2) Multi-Perspective State Reasoning, (3) Calibrated Risk Inference, and
+(4) Conformal Adaptation. Figure~\ref{fig:architecture} illustrates the end-to-end architecture.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\linewidth]{figures/zerocausal_architecture.png}
+\caption{End-to-end CBSR pipeline. Raw audit logs are binned into windows, parsed into
+provenance-graph edge counts, and fed into online RobustParCorr causal discovery. SCM outputs
+are projected into a 12-dimensional behavioral state space $\mathcal{S}$, evaluated in parallel
+by three reasoning operators ($R_L$, $R_T$, $R_B$), fused by a stacked meta-operator, and
+calibrated using online conformal prediction.}
+\label{fig:architecture}
+\end{figure}
+
+
+\section{Event Extraction and Binning}
+
+Raw system audit logs are parsed into \emph{provenance edges} of the form:
+\[
+\texttt{SRC\_TYPE:SRC\_ID} \to \texttt{ACTION} \to \texttt{DST\_TYPE:DST\_ID}
+\]
+Events are aggregated into non-overlapping windows of width $W$ (defaulting to $W = 1$\,s for
+high-density telemetry, $W = 10$\,s for lower-density logs such as BETH). The result is a
+multivariate time series $X_t \in \mathbb{R}^d$, where each dimension corresponds to a unique
+provenance edge type and the value represents the count in window $t$.
+
+
+\section{Robust Causal Discovery and SCM Fitting}
+\label{sec:causal_discovery}
+
+Given the streaming time-series $X_t$, we perform online causal discovery using the
+\textbf{PCMCI} algorithm~\cite{pcmci2019} under the Tigramite framework, with a maximum
+temporal lag $\tau_{\max} = 2$\,s.
+
+To mitigate sensitivity to outliers and training contamination, we employ \textbf{RobustParCorr},
+which uses the Minimum Covariance Determinant (MCD) estimator to compute a robust covariance
+matrix. The MCD estimator finds the subset of $h = \lfloor n \cdot 0.85 \rfloor$ observations
+minimizing the covariance determinant, tolerating up to 15\% contamination. Partial correlations
+are computed from the robust precision matrix $\hat{\Theta} = \hat{\Sigma}_{\text{MCD}}^{-1}$:
+\begin{equation}
+\rho_{ij|\text{rest}} = -\frac{\hat{\Theta}_{ij}}{\sqrt{\hat{\Theta}_{ii} \hat{\Theta}_{jj}}}
+\end{equation}
+
+For each variable $X^j$ in the discovered causal graph, we model its normal mechanism using
+a Structural Causal Model (SCM):
+\begin{equation}
+X^j_t = \sum_{X^i_{t-\tau} \in \mathcal{P}(X^j_t)} \beta_{i,j} X^i_{t-\tau} + \epsilon^j_t
+\end{equation}
+where $\beta_{i,j}$ are OLS regression coefficients fitted on the training partition. To prevent
+division-by-zero on highly invariant features, we enforce a standard deviation floor:
+\begin{equation}
+\tilde{\sigma}_j = \max\!\left(\text{std}(\epsilon^j),\; \sigma_{\text{floor}}\right),\quad
+\sigma_{\text{floor}} = 1.0
+\end{equation}
+
+Regression coefficients are updated online using a per-feature scalar \textbf{Kalman filter}:
+\begin{equation}
+\hat{\beta}_j^{t+1} = \hat{\beta}_j^t + K_t (x_j^t - \hat{x}_j^t)
+\end{equation}
+where $K_t$ is the Kalman gain with process noise $Q = 10^{-4}$. This eliminates discrete
+change-point resets and provides smooth adaptation to concept drift.
+
+
+\section{Behavioral State Projection}
+\label{sec:state_space}
+
+The system state at time $t$ is encoded as $S_t = \phi(X_t, G_t) \in \mathcal{S}$, where $X_t$
+is the observed telemetry and $G_t$ is the evolving causal graph. We define a formal,
+multi-dimensional behavioral state space:
+\begin{equation}
+\mathcal{S} = \mathcal{S}_{\text{struct}} \times \mathcal{S}_{\text{dyn}} \times \mathcal{S}_{\text{beh}}
+\end{equation}
+where $\mathcal{S}_{\text{struct}} \in \mathbb{R}^3$ captures structural consistency and
+topological footprint, $\mathcal{S}_{\text{dyn}} \in \mathbb{R}^3$ captures rate fluctuations,
+and $\mathcal{S}_{\text{beh}} \in \mathbb{R}^6$ captures causal mechanism violations and
+behavioral complexity.
+
+The projection $\phi$ maps raw telemetry and SCM residuals into a 12-dimensional state vector
+$S_t = [s_{t,1}, \ldots, s_{t,12}]^T$ organized into five invariant coordinate groups:
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{12-dimensional Behavioral State Space coordinate definitions.}
+\begin{tabular}{clp{7cm}}
+\toprule
+\textbf{Dim} & \textbf{Group / Feature} & \textbf{Description} \\
+\midrule
+$s_1$ & \textit{Structural}: Novelty Count & Active edges with zero weight in baseline graph \\
+$s_2$ & \textit{Structural}: Active Fraction & Proportion of non-zero edge types in window \\
+\midrule
+$s_3$ & \textit{Activity}: Burstiness & Variance of active edge counts \\
+$s_4$ & \textit{Activity}: Max $z$-score & $\max_j |\epsilon^j_t / \tilde{\sigma}_j|$ \\
+$s_5$ & \textit{Activity}: Mean $z$-score & $\text{mean}_j |\epsilon^j_t / \tilde{\sigma}_j|$ \\
+\midrule
+$s_6$ & \textit{Complexity}: Entropy & Shannon entropy of active edge distribution \\
+$s_7$ & \textit{Complexity}: Spike Ratio & $s_4 / (s_5 + 10^{-5})$ \\
+\midrule
+$s_8$ & \textit{Mechanism}: Local Anomaly Score & Baseline hybrid causal score (CAS) \\
+$s_9$ & \textit{Mechanism}: Log Min $p$-value & $\log(\min_j p_j + 10^{-5})$ \\
+$s_{10}$ & \textit{Mechanism}: Residual Energy & $\sum_j (\epsilon^j_t / \tilde{\sigma}_j)^2$ \\
+$s_{11}$ & \textit{Mechanism}: Causal Violations & Count of features with $|z_j| > 2.5$ \\
+\midrule
+$s_{12}$ & \textit{Intervention}: CIS & Causal Intervention Score (see below) \\
+\bottomrule
+\end{tabular}
+\label{tab:state_coords}
+\end{table}
+
+\subsection{Causal Intervention Score (CIS)}
+
+The CIS quantifies the topological propagation of SCM violations across the causal dependency
+graph $G_{\text{causal}} = (V, E_{\text{causal}})$. Define the violated node set
+$\mathcal{V}_{\text{viol}} = \{v \in V : |z_v| > 2.5\}$ and its edge boundary
+$\partial\mathcal{V}_{\text{viol}} = \{(u,v) \in E_{\text{causal}} : u \in \mathcal{V}_{\text{viol}},\;
+v \notin \mathcal{V}_{\text{viol}}\}$. Then:
+\begin{equation}
+\text{CIS} = \frac{|\partial\mathcal{V}_{\text{viol}}|}{|E_{\text{causal}}|}
+\end{equation}
+
+This is grounded in graph boundary theory~\cite{chung1997spectral}: for a singleton
+administrative anomaly, CIS $\approx 0$; for a connected violated subgraph spanning $k$ process
+nodes (multi-stage lateral movement), $|\partial\mathcal{V}_{\text{viol}}|$ grows monotonically
+with the extent of compromise by the sub-modularity of graph cuts. Normalizing by
+$|E_{\text{causal}}|$ makes CIS scale-invariant across graphs of varying size.
+
+
+\section{Multi-Perspective State Reasoning}
+\label{sec:reasoning}
+
+The state vector $S_t$ is processed in parallel by three distinct reasoning operators, each
+analyzing a different perspective of the behavioral state space:
+
+\subsection{Local State Reasoning ($R_L$)}
+\label{sec:hcas}
+
+$R_L$ measures instantaneous causal mechanism violations on the state representation:
+\begin{equation}
+R_L(S_t) = w \cdot (1 - \min_j p_{\text{val}}^j) + (1-w) \cdot \hat{F}_{\epsilon}(\chi^2_{\text{stat}})
+\end{equation}
+where $p_{\text{val}}^j = 2(1 - \Phi(|z_j|))$, $\hat{F}_{\epsilon}$ is the empirical CDF of
+calibration residual energies, and $w = 0.5$. This captures APT events that cause immediate,
+sharp deviations in specific causal edges.
+
+\subsection{Temporal State Reasoning ($R_T$)}
+
+$R_T$ evaluates state trajectories over a rolling sequence of $k = 8$ consecutive states to
+detect slow, multi-stage attack progression. An LSTM Autoencoder is trained on normal-period
+state sequences and scores anomalies via reconstruction error:
+\begin{equation}
+R_T(S_{t-k+1:t}) = \frac{1}{k} \sum_{i=0}^{k-1} \|S_{t-i} - \hat{S}_{t-i}\|_2^2
+\end{equation}
+This captures temporal attack patterns---such as a sequence of individually low-scoring windows
+that collectively represent unusual state-transition behavior (e.g., slow lateral movement).
+
+\subsection{Behavioral State Reasoning ($R_B$)}
+
+$R_B$ classifies complex, non-linear attack manifolds via a \textbf{Behavioral Pattern
+Reasoner (BPR)}, implemented as a Random Forest classifier trained on the validation partition's
+12-dimensional state coordinates and sparse attack labels:
+\begin{equation}
+R_B(S_t) = P(S_t \notin \mathcal{M}_{\text{benign}} \mid S_t)
+\end{equation}
+where $\mathcal{M}_{\text{benign}}$ is the learned benign behavioral manifold. The BPR learns
+which combinations of state coordinates are most discriminative for attack detection; its feature
+importances (Section~\ref{sec:feature_importance}) reveal that the Log Min $p$-value ($s_9$)
+and Residual Energy ($s_{10}$) are consistently the most informative dimensions.
+
+
+\section{Calibrated Risk Inference and Conformal Alerting}
+\label{sec:calibration}
+
+\subsection{Stacked Risk Fusion}
+
+The three reasoning operator outputs are integrated by a logistic regression meta-learner:
+\begin{equation}
+\text{Risk}_t = \sigma\!\left(w_1 \cdot R_L(S_t) + w_2 \cdot R_T(S_{t-k+1:t}) + w_3 \cdot R_B(S_t) + b\right)
+\end{equation}
+where $\sigma(\cdot)$ is the sigmoid function and the weights $\{w_1, w_2, w_3, b\}$ are learned
+on the validation partition to maximize detection AUC.
+
+\subsection{Conformal Prediction and Online Threshold Adaptation}
+
+To map $\text{Risk}_t$ to statistical decisions with distribution-free guarantees, we use split
+conformal prediction. A sorted rolling queue of $M = 245$ calibration risk scores is maintained.
+For a new risk score, the conformal p-value is computed via binary search in $O(\log M)$:
+\begin{equation}
+\text{conf\_pval}(\text{Risk}_t) = \frac{\sum_{i=1}^M \mathbb{I}(s_i \geq \text{Risk}_t) + 1}{M + 1}
+\end{equation}
+An alarm is raised when $\text{conf\_pval}(\text{Risk}_t) < \alpha_t$. Under exchangeability,
+this guarantees $\Pr(\text{false alarm}) \leq \alpha_t$.
+
+To handle concept drift, $\alpha_t$ adapts online via a stochastic feedback loop:
+\begin{equation}
+\alpha_{t+1} = \alpha_t + \eta \cdot (\text{target\_fpr} - \mathbb{I}(\text{Alarm Raised}))
+\end{equation}
+When the empirical alarm rate exceeds the budget, $\alpha_t$ decreases; when too few alarms
+occur, $\alpha_t$ increases. Following Barber et al.~\cite{barber2023conformal}, we frame this
+as an adaptive empirical coverage control mechanism, not a strict exchangeability-based guarantee,
+since streaming concept drift violates exchangeability.
+
+\textbf{Theorem 1 (FAR Bound under Contamination and Drift).} Let $\epsilon \in [0, \tfrac{1}{2})$
+be the calibration contamination rate and $\delta_{\max} = \text{TV}(P_t, P_{t+1})$ the
+per-step total-variation drift rate, with exponential weight decay $\lambda$ on historical
+calibration scores. Then the empirical false alarm rate satisfies:
+\begin{equation}
+\text{FAR}(\alpha) \leq \alpha + \frac{2\epsilon}{1-\epsilon} + \frac{\delta_{\max}}{\lambda}
+\end{equation}
+For our operational setting ($\epsilon \leq 0.05$, $\delta_{\max} \leq 0.02$, $\lambda = 0.95$),
+this bounds $\text{FAR} \leq \alpha + 0.105 + 0.021 = \alpha + 0.126$. The change-point
+mechanism below restores the $\delta_{\max}/\lambda$ term to near-zero after drift events.
+
+\subsection{Change-Point Detection and SCM Refit}
+
+The \texttt{AdaptiveWindowDetector} monitors state coordinates using Welch's $t$-statistic
+between short-term ($L_s = 30$) and long-term ($L_l = 200$) windows. Upon detecting a
+change-point ($\max_j |t_j| > 3.0$), the system (1) refits the SCM regression models online
+on recent windows, and (2) flushes the conformal calibration queue to restore localized
+exchangeability with post-drift normal risk scores.
+
+
+\section{Training Pipeline}
+
+CBSR follows a strict chronological three-partition pipeline:
+\begin{enumerate}
+\item \textbf{Train Proper (first 50\%)}: Unsupervised RobustParCorr causal discovery and SCM
+    fitting. The LSTM Temporal Reasoner is trained on normal-period state sequences. No labels
+    or attack-free assumptions are used.
+\item \textbf{Validation (50\%--70\%)}: The Behavioral Pattern Reasoner (BPR) and stacked
+    meta-learner are trained on this partition's state coordinates and sparse labels.
+\item \textbf{Test (final 30\%)}: Streaming risk inference with online conformal alerting.
+    Final AUC and FPR metrics are reported.
+\end{enumerate}

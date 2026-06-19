@@ -1,0 +1,60 @@
+% ============================================================================
+% Chapter 3: Threat Model
+% ============================================================================
+\chapter{Threat Model}
+\label{ch:threat_model}
+
+This chapter defines the adversary model and security assumptions under which CBSR operates.
+
+\section{Attacker Capabilities}
+
+We assume a sophisticated attacker capable of:
+\begin{itemize}
+\item Executing arbitrary commands on compromised hosts---spawning processes, downloading
+    payloads, and modifying file systems---without generating signature-based alerts.
+\item Conducting multi-stage APT campaigns including initial access, privilege escalation,
+    lateral movement, and data exfiltration.
+\item Persisting in the target environment for extended periods (days to months).
+\item Being \emph{aware of our monitoring presence} and deploying active evasion strategies.
+\end{itemize}
+
+\section{Fundamental Assumption}
+
+We assume the attacker \textbf{cannot break the fundamental causal invariances of the operating
+system without leaving traces in the provenance graph}. Any operation that creates a process,
+reads or writes a file, or establishes a network connection \emph{must} be recorded in the
+system audit log. This assumption holds for modern audit frameworks (Windows ETW, Linux auditd,
+macOS Endpoint Security) that operate at the kernel level.
+
+\section{Adaptive Adversary Strategies}
+
+We consider three specific evasion strategies a sophisticated adversary might employ:
+
+\textbf{Calibration Poisoning.}~A poisoner injects high-volume, anomalous but non-malicious-looking
+traffic during the baseline training phase. This inflates the conformal calibration queue's score
+distribution, widening detection threshold bounds and allowing subsequent stealthy attack steps to
+bypass alerting. CBSR's RobustParCorr (MCD-based, tolerating up to 15\% contamination) insulates
+the causal discovery phase; the Behavioral Pattern Reasoner's explicit validation-set training
+further insulates the classification boundary from calibration inflation.
+
+\textbf{Refit Blind Spots.}~When CBSR detects a concept drift change-point and refits its SCM,
+a temporary adaptation window exists before calibration scores stabilize. An adversary can
+intentionally trigger benign-looking drift (e.g., a software update) and immediately execute
+malicious actions during this window. This vulnerability is bounded to approximately 1--2
+conformal calibration cycles.
+
+\textbf{SCM-Aware Mimicry.}~An attacker who learns the system SCM's structure can orchestrate
+execution timings to simultaneously satisfy all $d \times \tau_{\max}$ causal constraints,
+bypassing residual-based alerts. On DARPA OpTC ($d = 130$, $\tau_{\max} = 2$), this requires
+matching 260 regression relationships while executing a multi-stage attack---a highly constrained
+operational task. Moreover, real APT campaigns inject novel process--file edges that have no
+causal parents in the baseline graph, triggering the Structural Consistency coordinate ($s_1$,
+novelty count) regardless of residual behavior.
+
+\section{Scope and Limitations}
+
+CBSR focuses on defending against stealthy APTs where precise multi-constraint causal mimicry or
+targeted poisoning is highly constrained. The framework is \emph{not} designed to defend against
+attackers with kernel-level access who can tamper with the audit logging subsystem, or
+side-channel attacks that leave no provenance traces. These limitations are discussed further in
+Chapter~\ref{ch:conclusion}.

@@ -1,0 +1,131 @@
+\section{System Design}
+\label{sec:design}
+
+The proposed Causal Behavioral State Reasoning framework projects streaming provenance graph telemetry into a multidimensional state space and infers latent threat risks. The system operates across four core layers: (1) Robust Causal Discovery and Behavioral State Projection, (2) Multi-Perspective State Reasoning, (3) Calibrated Risk Inference, and (4) Conformal Adaptation. Figure \ref{fig:architecture} illustrates the end-to-end architecture.
+
+\begin{figure*}[t]
+\centerline{\includegraphics[width=0.9\linewidth]{results/final/zerocausal_architecture.png}}
+\caption{End-to-end behavioral state reasoning and risk inference pipeline. Raw audit logs are binned into windows, parsed into provenance-graph edge counts, and fed into online RobustParCorr causal discovery. The SCM outputs are projected into a 12-dimensional behavioral state space $\mathcal{S}$, evaluated in parallel by three reasoning operators ($R_L$, $R_T$, $R_B$), fused via a stacked meta-operator, and calibrated using conformal prediction.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Robust SCM \& Causal Discovery}
+Given a multivariate streaming time-series $X_t \in \mathbb{R}^d$ corresponding to edge occurrence counts in provenance subgraphs, we perform online causal discovery using the \textbf{PCMCI} algorithm \cite{pcmci2019} under the \textbf{Tigramite} framework. Event streams are binned into non-overlapping windows of width $W$ (defaulting to 1\,s or 10\,s depending on host event density). 
+
+To mitigate sensitivity to outliers and training contamination, we employ \textbf{RobustParCorr}, which leverages the Minimum Covariance Determinant (MCD) estimator to compute a robust covariance matrix. The MCD estimator identifies a subset of size $h = \lfloor n \cdot \text{support\_fraction} \rfloor$ minimizing the determinant of the covariance matrix, tolerating up to 15\% contamination in training data. Using the robust covariance, partial correlations are evaluated as:
+\begin{equation}
+\rho_{ij|\text{rest}} = -\frac{\hat{\Theta}_{ij}}{\sqrt{\hat{\Theta}_{ii} \hat{\Theta}_{jj}}}
+\end{equation}
+where $\hat{\Theta} = \hat{\Sigma}_{\text{MCD}}^{-1}$ is the robust precision matrix.
+
+For each variable $X^j$ in the discovered causal graph, we model its normal mechanism using a Structural Causal Model (SCM):
+\begin{equation}
+X^j_t = \sum_{X^i_{t-\tau} \in P(X^j_t)} \beta_{i,j} X^i_{t-\tau} + \epsilon^j_t
+\end{equation}
+where $\beta_{i,j}$ are regression coefficients fitted online, and $\epsilon^j_t$ is the residual noise. To prevent division-by-zero on highly invariant features, we enforce a standard deviation floor $\sigma_{\text{floor}} = 1.0$:
+\begin{equation}
+\tilde{\sigma}_j = \max(\text{std}(\epsilon^j), \sigma_{\text{floor}})
+\end{equation}
+
+\subsection{Behavioral State Projection}
+The system state at time $t$ is encoded as $S_t = \phi(X_t, G_t) \in \mathcal{S}$, where $X_t$ denotes observed telemetry and $G_t$ denotes the evolving causal structure. We define a formal, multi-dimensional state space $\mathcal{S}$ as the product of structural, dynamic, and behavioral/mechanism subspaces:
+\begin{equation}
+\mathcal{S} = \mathcal{S}_{\text{struct}} \times \mathcal{S}_{\text{dyn}} \times \mathcal{S}_{\text{beh}}
+\end{equation}
+where:
+\begin{itemize}
+\item $\mathcal{S}_{\text{struct}} \in \mathbb{R}^3$ captures structural consistency and topological footprint.
+\item $\mathcal{S}_{\text{dyn}} \in \mathbb{R}^3$ captures rate fluctuations and signal variance.
+\item $\mathcal{S}_{\text{beh}} \in \mathbb{R}^6$ captures causal mechanism violations and complexity.
+\end{itemize}
+
+Specifically, $\phi$ projects the raw telemetry and SCM residuals into a 12-dimensional state vector $S_t = [s_{t,1}, \dots, s_{t,12}]^T$ representing coordinates of these subspaces. The selection of exactly 12 coordinates is not arbitrary, but is systematically designed to ground the system's threat reasoning on five core physical and topological invariants of streaming provenance graphs, balancing descriptive richness with SCM parameter stability: (1) \textit{Structural Consistency} (2D) to identify changes in the process dependency structure, (2) \textit{Activity Dynamics} (3D) to capture volumetric log bursts, (3) \textit{Behavioral Complexity} (2D) to measure active edge distribution entropy, (4) \textit{Mechanism Violation} (4D) to measure deviations from SCM invariants, and (5) \textit{Intervention Locality} (1D) to capture violation propagation. Increasing the dimensionality introduces high-frequency administrative noise and quadratically increases online causal discovery overhead; decreasing the dimensions (such as removing entropy or dynamic coordinates) degrades model robustness under concept-drift. The dimensions measure five key State Components:
+\begin{enumerate}
+\item \textbf{Structural Consistency} ($\mathcal{S}_{\text{struct}}$ components):
+\begin{itemize}
+\item \textit{Novelty Count} ($s_{t,1}$): Count of active edges in window $t$ that had zero-weight in the discovered baseline graph.
+\item \textit{Active Fraction} ($s_{t,2}$): Percentage of active edges out of the total edge pool.
+\end{itemize}
+\item \textbf{Activity Dynamics} ($\mathcal{S}_{\text{dyn}}$ components):
+\begin{itemize}
+\item \textit{Burstiness} ($s_{t,3}$): Variance of active edge counts in the current window.
+\item \textit{Maximum $z$-score} ($s_{t,4}$): Largest individual residual deviation: $\max_j |\epsilon^j_t / \tilde{\sigma}_j|$.
+\item \textit{Mean $z$-score} ($s_{t,5}$): Average residual deviation across all causal dimensions.
+\end{itemize}
+\item \textbf{Behavioral Complexity} ($\mathcal{S}_{\text{beh}}$ components):
+\begin{itemize}
+\item \textit{Entropy} ($s_{t,6}$): Shannon entropy of the active edge distribution.
+\item \textit{Spike Ratio} ($s_{t,7}$): Max-to-mean deviation ratio: $s_{t,4} / (s_{t,5} + 10^{-5})$.
+\end{itemize}
+\item \textbf{Mechanism Violation} ($\mathcal{S}_{\text{beh}}$ components):
+\begin{itemize}
+\item \textit{Local Anomaly Score} ($s_{t,8}$): The baseline hybrid causal score combining residual errors and p-values (CAS).
+\item \textit{Log Minimum p-value} ($s_{t,9}$): Logarithmic minimum p-value across SCM features: $\log(\min_j p_j + 10^{-5})$.
+\item \textit{Residual Energy ($\chi^2$)} ($s_{t,10}$): Normalized sum of squared prediction errors: $\sum_j (\epsilon^j_t / \tilde{\sigma}_j)^2$.
+\item \textit{Causal Violations} ($s_{t,11}$): Count of features whose SCM prediction residual exceeds $2.5\tilde{\sigma}_j$.
+\end{itemize}
+\item \textbf{Intervention Locality} ($\mathcal{S}_{\text{struct}}$ components):
+\begin{itemize}
+\item \textit{Causal Intervention Score (CIS)} ($s_{t,12}$): Quantifies the topological propagation of SCM violations across the causal dependency graph $G_{\text{causal}} = (V, E_{\text{causal}})$, where $V$ is the set of provenance node types and $E_{\text{causal}}$ are the learned causal edges. Define the violated node set $\mathcal{V}_{\text{viol}} = \{v \in V : |\epsilon^v_t / \tilde{\sigma}_v| > 2.5\}$ and its edge boundary $\partial \mathcal{V}_{\text{viol}} = \{(u,v) \in E_{\text{causal}} : u \in \mathcal{V}_{\text{viol}},\, v \notin \mathcal{V}_{\text{viol}}\}$. Then:
+\begin{equation}
+\text{CIS} = \frac{|\partial \mathcal{V}_{\text{viol}}|}{|E_{\text{causal}}|}
+\end{equation}
+
+\textit{Graph-theoretic justification.} The formula is grounded in graph boundary theory~\cite{chung1997spectral}. For a singleton violation (e.g., a background daemon writing a PID file), $|\partial\{v\}| = \deg(v)$, which is a small constant for administrative processes in sparse host audit graphs; thus CIS $\approx 0$. For a connected violated subgraph spanning $k$ process nodes (multi-stage lateral movement), the cut $|\partial \mathcal{V}_{\text{viol}}|$ grows monotonically with the extent of the compromise: by the sub-modularity of the graph cut function~\cite{chung1997spectral}, merging two disjoint violated components can only increase or maintain the aggregate boundary. Normalizing by $|E_{\text{causal}}|$ bounds CIS in $[0, 1]$ and makes it scale-invariant across graphs of varying size. A low CIS indicates a localized, administratively explainable anomaly; a high CIS indicates cascading, multi-hop threat propagation.
+\end{itemize}
+\end{enumerate}
+
+\subsection{Behavioral State Distance}
+\label{sec:state_distance}
+To formally assess system trajectory anomalies, we define a subspace-weighted distance metric on $\mathcal{S}$. For any two states $S_i, S_j \in \mathcal{S}$:
+\begin{equation}
+\begin{split}
+D(S_i, S_j) = & \;\lambda_1 D_{\text{struct}}(S_i, S_j) + \lambda_2 D_{\text{dyn}}(S_i, S_j) \\
+               & + \lambda_3 D_{\text{beh}}(S_i, S_j)
+\end{split}
+\end{equation}
+where $D_{\text{struct}} = \|S_i^{\text{struct}} - S_j^{\text{struct}}\|_2$, $D_{\text{dyn}} = \|S_i^{\text{dyn}} - S_j^{\text{dyn}}\|_2$, and $D_{\text{beh}} = \|S_i^{\text{beh}} - S_j^{\text{beh}}\|_2$, with $\lambda_1, \lambda_2, \lambda_3 \geq 0$ weighting relative contributions.
+
+This metric is directly used in two downstream components: (1) \textbf{Temporal State Reasoning}: the LSTM Autoencoder learns the distribution of normal state trajectories, and the reconstruction risk $R_T = \frac{1}{k}\sum_{i} \|S_{t-i} - \hat{S}_{t-i}\|_2^2$ can be interpreted as the expected squared Behavioral State Distance between observed and predicted states, i.e., $R_T \propto E[D(S_t, \hat{S}_t)^2]$ under equal $\lambda$ weights. (2) \textbf{Drift Detection}: the \texttt{AdaptiveWindowDetector} tracks the Behavioral State Distance between the short-term mean state $\bar{S}^{\text{short}}$ and long-term mean state $\bar{S}^{\text{long}}$; when $D(\bar{S}^{\text{short}}, \bar{S}^{\text{long}}) > \tau_{\text{drift}}$, a change-point is declared and the SCM is refit. This provides a unified theoretical language for both trajectory anomaly scoring and drift detection.
+
+\subsection{Multi-Perspective State Reasoning}
+To comprehensively analyze system trajectories, the state vector $S_t$ is processed in parallel by three distinct reasoning operators, each analyzing a different perspective of the state space:
+\begin{itemize}
+\item \textbf{Local State Reasoning ($R_L$)}: Evaluates instantaneous mechanism violations on the state representation using the Local Anomaly Score component:
+\begin{equation}
+R_L(S_t) = w \cdot (1 - \min_j p_{\text{val}}^j) + (1-w) \cdot \hat{F}_{\epsilon}(\chi^2_{\text{stat}})
+\end{equation}
+where $p_{\text{val}}^j = 2(1 - \Phi(|\epsilon^j_t/\tilde{\sigma}_j|))$, and $\hat{F}_{\epsilon}$ is the empirical CDF of the squared residual energies observed during calibration.
+\item \textbf{Temporal State Reasoning ($R_T$)}: Evaluates state trajectories over sequence windows to capture system dynamics and \textbf{State-Transition Risk}. It monitors a rolling sequence of $k$ consecutive states $\{S_{t-k+1}, \dots, S_t\} \in \mathbb{R}^{k \times 12}$ (defaulting to $k=8$). An LSTM Autoencoder compresses the sequence into a 32D latent space and reconstructs it. The sequence reconstruction error represents the transition risk:
+\begin{equation}
+R_T(S_{t-k+1:t}) = \frac{1}{k} \sum_{i=0}^{k-1} \|S_{t-i} - \hat{S}_{t-i}\|_2^2
+\end{equation}
+This measures the deviation of the observed state trajectory from normal transition pathways, capturing slow, stealthy multi-stage attacks.
+\item \textbf{Behavioral State Reasoning ($R_B$)}: Analyzes state distributions and geometry on the \textbf{Behavioral Manifold} $\mathcal{M} \subset \mathcal{S}$ via a \textbf{Behavioral Pattern Reasoner (BPR)}. We assume that benign system states concentrate on a low-dimensional behavioral manifold. The BPR (implemented as a Random Forest classifier) is trained on a validation partition (containing normal and attack samples) to learn the decision boundary separating normal states on $\mathcal{M}$ from out-of-manifold attack vectors:
+\begin{equation}
+R_B(S_t) = P(S_t \notin \mathcal{M} \mid S_t)
+\end{equation}
+This geometric perspective identifies when a state coordinate diverges from valid operational patterns.
+\end{itemize}
+
+\subsection{Calibrated Risk Inference}
+To estimate the final risk of intrusion, the outputs of the three reasoning operators ($R_L, R_T, R_B$) are integrated via a calibrated fusion operator to infer the latent cyber risk $\text{Risk}_t$:
+\begin{equation}
+\text{Risk}_t = \sigma(w_1 \cdot R_L(S_t) + w_2 \cdot R_T(S_{t-k+1:t}) + w_3 \cdot R_B(S_t) + b)
+\end{equation}
+where $\sigma(z) = 1/(1+e^{-z})$. The weights $w = [w_1, w_2, w_3]$ and bias $b$ are trained on the validation partition using gradient descent to maximize classification AUC. This calibration automatically determines the importance of each reasoning perspective for the target environment.
+
+\subsection{Conformal Calibration \& Alerting}
+To map the final risk score $\text{Risk}_t$ to statistical decisions with conformal guarantees, we use split conformal prediction. We maintain a sorted rolling queue of calibration risk scores: $s_1 \leq s_2 \leq \dots \leq s_M$. For a new risk score $\text{Risk}_t$, the conformal p-value is computed via binary search:
+\begin{equation}
+\text{conf\_pval}(\text{Risk}_t) = \frac{1}{M+1} \sum_{i=1}^M \mathbb{I}(s_i \geq \text{Risk}_t) + \frac{1}{M+1}
+\end{equation}
+An alarm is raised if $\text{conf\_pval}(\text{Risk}_t) < \alpha_t$. To handle concept drift, the threshold $\alpha_t$ adapts online using a stochastic feedback loop:
+\begin{equation}
+\alpha_{t+1} = \alpha_t + \eta \cdot (\text{target\_fpr} - \mathbb{I}(\text{Alarm Raised}))
+\end{equation}
+where $\eta$ is the learning rate.
+
+\textit{Theoretical Grounding under Drift:} Standard split conformal prediction yields exact, distribution-free mathematical bounds on coverage only under the assumption that calibration and test samples are exchangeable. In streaming enterprise logs, natural concept drift and online SCM refitting violate this exchangeability. Therefore, instead of asserting static mathematical bounds, we frame our online threshold adaptation as an \textbf{adaptive empirical coverage control mechanism} inspired by non-exchangeable conformal prediction principles (e.g., Barber et al. \cite{barber2023conformal}). The stochastic feedback loop acts as an online controller that drives empirical false alarm rates to the target budget on average, while our change-point detector resets the calibration queue upon drift to restore localized exchangeability.
+
+To handle abrupt concept drift, the \texttt{AdaptiveWindowDetector} monitors the state coordinates using Welch's $t$-statistic on a short-term window of length $L_s$ and long-term window $L_l$. When a change-point is declared, the system refits SCM regression models online and flushes the conformal calibration queue to repopulate it with post-drift normal risk scores.

@@ -1,0 +1,48 @@
+\appendices
+
+\section{Artifact Appendix}
+
+This appendix provides instructions for reviewers and researchers to set up the environment, run the evaluation pipelines, and reproduce all results and figures presented in the paper for our Causal Behavioral State Reasoning (v2) model.
+
+\subsection{Abstract}
+The artifact consists of the core Python implementation of the Causal Behavioral State Reasoning framework, evaluation scripts for five benchmarks (DARPA OpTC, simulated DARPA TC3, simulated NODLINK, BETH, and StreamSpot), configurations, and plotting tools. The evaluations run RobustParCorr causal discovery, fit Structural Causal Models (SCMs), map outputs to the 12D behavioral state space, evaluate risk via local, temporal, and behavioral pattern reasoning (BPR), fuse them via calibrated risk fusion, and perform conformal calibration.
+
+\subsection{Artifact Meta-Information}
+\textbf{Algorithm}: RobustParCorr causal discovery, SCM regression, Behavioral State Projection, Temporal State Reasoning, Behavioral Pattern Reasoner (BPR) classification, Calibrated Risk Fusion, conformal calibration.
+\textbf{Program}: Python 3.8--3.11 on Linux/macOS/WSL2. Default seed: \texttt{42}.
+\textbf{Execution Time}: $\sim$18\,s for OpTC (streaming evaluation; one-time PCMCI discovery is pre-calculated or cached); $\sim$1.3--1.7\,ms scoring latency per window.
+\textbf{Output}: JSON summary metrics, PNG figures.
+
+\subsection{Requirements}
+\textbf{Hardware}: Standard x86/ARM64, $\geq$2 cores, $\geq$4\,GB RAM, $\geq$500\,MB storage.
+\textbf{Software}: Python 3.8--3.11; dependencies listed in \texttt{requirements.txt}.
+
+\subsection{Installation \& Environment Setup}
+To run the artifact, first clone the repository and establish the virtual environment:
+\begin{lstlisting}
+python3 -m venv .venv_zc
+source .venv_zc/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+\end{lstlisting}
+
+\subsection{Reproduction of Experimental Results}
+
+\subsubsection{Run the Complete Evaluation Pipeline}
+To reproduce the framework results for all five datasets, run:
+\begin{lstlisting}
+python3 15_beat_papers_evaluation.py \
+  --datasets tc3 nodlink beth optc streamspot \
+  --seed 42 --ae_epochs 60
+\end{lstlisting}
+This script loads the processed streams, performs the chronological splits, runs the causal discovery, evaluates temporal and behavioral pattern reasoning, calibrates the risk fusion operator, and logs the final AUC comparisons against baseline models to \texttt{results/beat\_papers\_results.json}.
+
+\subsubsection{Generate and Replicate the Figures}
+Run the plotting scripts to compile the comparison figure.
+\begin{lstlisting}
+python3 plot_v1_vs_v2.py
+\end{lstlisting}
+This script processes the logged results and generates \texttt{plots/v1\_vs\_v2\_comparison.png}, which overlays the pure causal baseline (v1), the proposed framework (v2), Isolation Forest, and PyTorch Autoencoders across all five benchmarks.
+
+\subsection{Code Availability}
+An anonymised version of our codebase is available for reviewer access at: \url{https://anonymous.4open.science/r/CausalBehavioralState}.

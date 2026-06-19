@@ -1,0 +1,1630 @@
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+10693
+
+LiNGAM-SF: Causal Structural Learning Method
+With Linear Non-Gaussian Acyclic
+Models for Streaming Features
+Chenglin Zhang , Graduate Student Member, IEEE, Hong Yu , Member, IEEE,
+Guoyin Wang , Senior Member, IEEE, and Yongfang Xie , Senior Member, IEEE
+
+Abstract— The causal structure learning for streaming features
+(CSLSFs) faces the following challenges: 1) the precision of
+learned causal structures is limited due to the score-based
+learning method and 2) they fail to detect the latent confounders.
+To address the challenges, this article proposes a novel causal
+structure learning method with linear non-Gaussian acyclic
+models for streaming features (LiNGAM-SFs), which utilizes the
+causal identifiability of the data. It is the first time to utilize
+LiNGAMs for online causal structure learning. First, we utilize
+the classical SF algorithm to learn the causal skeleton. This article
+provides the property of this skeleton, proving that two adjacent
+variables on an edge is one of three possible structures. Second,
+we give two propositions and identify the causal directions
+in the presence of latent variables (ICDPLV) subalgorithm to
+distinguish among the three structures and precisely identify the
+causal directions. In addition, the subalgorithm can output a
+candidate set of latent confounders from a local perspective.
+Finally, the detecting latent confounder (DLC) subalgorithm
+detects the latent confounders in the candidate set with a
+global perspective. The precision of the proposed method is
+increased at least by 11% on average than those of the stateof-the-art method. Furthermore, the experiments verify that the
+LiNGAM-SF method is able to detect the latent confounders.
+Index Terms— Causal identifiability, causal structure, latent
+confounders, linear non-Gaussian acyclic model (LiNGAM),
+streaming features (SFs).
+
+N OMENCLATURE
+Notation
+Gt
+Gt ′
+Vt
+E
+
+Description
+Causal structure at the time t.
+Causal skeleton at the time t.
+Observed variable set at the time t, where
+vi ∈ Vt denotes a observed feature variable.
+Directed edge set, where ⟨vi , v j ⟩ ∈ E.
+
+Received 10 January 2024; revised 9 July 2024 and 14 November 2024;
+accepted 9 January 2025. Date of publication 23 January 2025; date of current
+version 4 June 2025. This work was supported in part by the National Natural
+Science Foundation of China under Grant 62136002, Grant 62233018, and
+Grant 62221005; and in part by the Natural Science Foundation of Chongqing
+under Grant cstc2022ycjh-bgzxm0004. (Corresponding authors: Hong Yu;
+Guoyin Wang.)
+Chenglin Zhang, Hong Yu, and Guoyin Wang are with Chongqing
+Key Laboratory of Computational Intelligence, Chongqing University
+of Posts and Telecommunications, Chongqing 400065, China (e-mail:
+zhangchenglin2021@foxmail.com; yuhong@cqupt.edu.cn; wanggy@cqupt.
+edu.cn).
+Yongfang Xie is with the School of Information Science and Engineering, Central South University, Changsha 410083, China (e-mail:
+yfxie@csu.edu.cn).
+Digital Object Identifier 10.1109/TNNLS.2025.3529753
+
+U
+
+Xo
+
+( j)
+
+ri
+A
+
+af
+i, j
+N
+Lt
+vi ⊥⊥ v j
+sigi , sig2 , r
+
+Undirected edge set, where (vi , v j ) ∈ U
+needs to have the directions identified in the
+subsequent steps.
+Observed data composed of the data xi on
+the variable vi ∈ Vt , distinguishing from
+the dataset X of all variables under the full
+observation.
+Residual of regressing xi on x j .
+Adjacency matrix representing the causal
+strength among the variables, whose element
+ai, j refers to the intensity of the direct causal
+impact of v j on vi .
+Total product of the path coefficients from v j
+to vi .
+Noise term, where n i ∈ N represents the
+noise on vi .
+Latent confounders detected at the time t.
+Indicating that vi and v j are independent.
+Hyperparameter.
+I. I NTRODUCTION
+
+A
+
+S THE attention to causality increases, people start to
+learn the causal structure from observational data. Currently, most research on causal structure learning focuses on
+static data [1], [2], [3]. However, in many real-world applications [4], [5], [6], there are dynamic data where the number of
+samples stays constant, while the features keep growing, called
+streaming features (SFs) [7]. Although the causal structure
+learning method for static data can provide results based on
+all features that have arrived, it requires relearning each time
+the features increase with lower efficiency. Hence, people carry
+out research on the causal structure learning for SFs (CSLSFs).
+The research aims to only update the historical causal structure
+when new features arrive, instead of relearning.
+In recent years, people have begun to pay attention to
+CSLSF [8], [9], [10], [11], [12]. These studies employ the
+scoring-based learning method to select the causal structure
+as the desired outcome. Fig. 1(a) indicates the unreliability
+of scoring. For instance, on synthetic data, we utilize the
+widely used MDL scoring function whose preference lies in
+achieving lower scores. The score of the real causal structure
+is close to that of Structure 2 (edge reversal) and higher than
+that of Structure 6 (edge missing). Therefore, blindly applying
+
+2162-237X © 2025 IEEE. All rights reserved, including rights for text and data mining, and training of artificial intelligence
+and similar technologies. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10694
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+Fig. 1.
+Limitations of the existing CSLSF methods. (a) Scores of the
+structures formed by three variables on synthetic data. (b) Ignoring the
+existence of latent confounders.
+
+scoring does not yield a precise causal structure. In addition,
+the existing methods assume that all feature variables are
+observed at any time, neglecting the presence of latent confounders. A latent confounder is an unobserved variable (latent
+variable) influencing multiple observed variables. In Fig. 1(b),
+the feature variables {v1 , v2 , v3 , v4 , v5 } are observed at the
+time t, while the unobserved variables v6 and v7 are latent
+confounders. The existing CSLSF methods ignore the latent
+confounders {v6 , v7 } and fail to detect them. They focus
+solely on the causal relationships among observed variables.
+In summary, there are two pressing issues in CSLSF methods
+that need resolution: 1) how to learn a precise causal structure
+and 2) how to detect latent confounders.
+This article addresses the issues in existing CSLSF methods, focusing on linear non-Gaussian data. Many real-world
+datasets, such as those concerning stocks, rainfall, and
+functional magnetic resonance imaging (fMRI) recordings,
+conform to the assumption of linear non-Gaussianity [13].
+Even in the cases of nonlinearity, the datasets may be approximated or modified to fit a linear relationship [14]. Besides
+being widely prevalent, linear non-Gaussian data also demonstrate causal identifiability [15]. Causal identifiability implies
+that causal relationships can be uniquely identified from
+observed data. Owing to the property, the linear non-Gaussian
+acyclic model (LiNGAM) and its various variants have been
+successful in causal discovery. Therefore, this article utilizes
+the causal identifiability of the data and proposes a method
+called LiNGAM-SF to solve the problems of existing CSLSF
+methods. As far as we know, it is the first time to dynamically
+learn causal structures based on LiNGAM.
+This article first proves that the skeleton learned by the
+classical algorithm exhibits Property 1, which states that
+each edge’s two feature variables can assume three possible
+structures: 1) vi → v j or v j → vi ; 2) vi ← lk → v j ,
+where lk is a latent confounder; and 3) vi ← lk → v j , and
+vi → v j or v j → vi , where lk is a latent confounder. Next, the
+proposed LiNGAM-SF provides two propositions and identifies the causal directions in the presence of latent variables
+(ICDPLV) subalgorithm based on Property 1 to precisely learn
+the causal structure. The precision achieved by the proposed
+
+method is increased at least by 11% on average compared
+to those of the state-of-the-art method (see Section IV-C).
+The ICDPLV subalgorithm also provides a candidate set of
+latent confounders from a local perspective. To further find
+the latent confounders, the method designs the detecting latent
+confounder (DLC) subalgorithm to filter and detect the latent
+confounders from the candidate set with the global perspective.
+The proposed method can detect latent confounders in all
+designed experimental cases (see Section IV-D).
+The contributions of this article are given as follows.
+1) This article provides Property 1, which proves that two
+adjacent feature variables on the edges of the skeleton
+graph only be one of three structures.
+2) Based on Property 1, this article proposes two propositions to precisely learn the structure by distinguishing
+the structure formed by the adjacent variables. Particularly, the scope of Proposition 1 expands beyond the
+limitation that latent variables must only include latent
+confounders.
+3) This article gives Property 2, describing the attributes
+of p feature variables with the common confounder.
+Property 2 helps the DLC subalgorithm to identify the
+common latent confounders without relying on complex
+high-level statistical information.
+4) As far as we know, it is the first exploration in
+the CSLSF method to detect the latent confounders.
+The source codes of the methods are available at
+https://github.com/yuhongcqupt/LiNGAM-SF.
+The rest of this article is organized as follows. Section II
+describes the existing causal structure learning methods.
+Section III describes the proposed LiNGAM-SF method
+in detail. Section IV contains experiments and analysis.
+Section V provides conclusions and further work.
+II. R ELATED W ORK
+A. Causal Structure Learning Methods With Latent Variables
+With the rise of causal learning, people have started to solve
+various problems in practice. For instance, Liang et al. [16]
+made the first attempt in attribute heterogeneous networks.
+Fang et al. [17] broke through the difficulty of dense and
+high-dimensional graph structures using low-rank technology.
+However, besides these, latent variables are a long-standing
+problem.
+In the presence of latent variables, the constrained methods are still considered a favorable option because of their
+efficiency. Spirtes et al. [18] proposed the fast causal inference (FCI) method based on d-separation. Subsequently,
+Richardson [19] proposed the optimization method called
+RFCI based on the FCI to learn the causal structure faster.
+Since the above methods rely on conditional independence
+(CI) tests, they are highly time-consuming to deal with highdimensional data. Therefore, several studies have commenced
+decreasing the quantity of CI tests. The MBCS* algorithm
+[20] employs the technique of Markov blankets, while the
+L-MARVEL method [21] removes the specific variables in the
+iterative process of updating causal structure. However, these
+constraint-based methods are unable to distinguish Markov
+equivalence classes, leading to the existence of undirected
+edges within the obtained causal structure.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+The score-based methods can avoid the above issue.
+Triantafillou and Tsamardinos [22] transformed the learning
+causal structure into a combinatorial optimization problem
+and obtained the causal structure by searching with the score.
+To further improve the efficiency, Tsirlis et al. [23] first utilized
+CI tests to limit the search space and then obtained the
+final structure through the greedy search. Bellot and van der
+Schaar [24] design a novel scoring method for learning the
+causal structure with consideration of latent confounders.
+In addition to the score-based methods, the functional
+causal models are also capable of distinguishing Markov
+equivalence classes. However, these methods need to fulfill some assumptions. The assumption of Gaussian linear
+acyclicity is crucial as it signifies the causal identifiability
+within the data. Any models meeting this assumption can
+be classified within the LiNGAM framework. LiNGAM [15]
+and the variant DirectLiNGAM [13] are able to identify the
+causal order without latent variables. In the presence of latent
+variables, the LvLiNGAM [14], the ParceLiNGAM [25], the
+MLCLiNGAM [26], and Salehkaleybar’s method [27] are able
+to not only identify the causal order of variables but also detect
+latent confounders.
+B. CSLSF Methods
+Although all the above methods have their own advantages,
+none of them can cope with SFs well. The reason is that most
+of the learning methods for the causal structure with latent
+variables mainly focus on static scenarios and are one-time
+learning methods. In the real scenarios of SFs, new features are
+continuously added to the observations over time. Therefore,
+the above methods will be relearned once new features arrive.
+Not exploiting the information of the historical causal graphs
+leads to repeated learning with considerable time cost. Hence,
+the CSLSF method aims at reducing the learning time in SFs
+by utilizing historical causal graphs.
+Yu et al. [8] conducted research on SFs and first proposed
+causal structure learning methods CDFSF and S-CDFSF. However, they cannot identify the causal order among variables.
+For this reason, Guo and Yang [9] proposed an optimized
+method called CSBS, but too many CI tests limit the performance of the method. To learn the causal structure faster,
+Yang et al. [10] proposed a new method CSSU based on
+symmetric uncertainty, but the method is not good at dealing with nonlinear causality. Subsequently, Yang et al. [11]
+investigated the data with nonlinear causality and presented
+the CANSF method based on the additive noise model. Unlike
+the previous two methods, the PRCDSF method [12] is able
+to handle linear and nonlinear causality. However, it still uses
+scoring to identify the causal direction and learn imprecise
+causal structure. Notably, besides studying dynamic scenarios
+of SFs, You et al. [28] initially study causal structure learning
+with incremental changes in both instances and features,
+introducing the C2 SLIFS method.
+In order to illustrate the advantages and disadvantages of
+each method clearly, the characteristics of CSLSF methods
+are summarized in Table I.
+From Table I, it can be found that most existing
+CSLSF methods learn the structure by scoring. However, the
+score-based methods face challenges in learning a precise
+
+10695
+
+TABLE I
+C OMPARISON OF CSLSF M ETHODS
+
+structure, as shown in Fig. 1(a). In addition, the existing
+methods ignore the latent variables, and they are unable
+to detect the latent confounders, as illustrated in Fig. 1(b).
+Therefore, a new CSLSF method is proposed for linear nonGaussian data.
+III. M ETHODOLOGY
+A. Problem Definition
+Let G = (V, E) denote a causal structure, where V refers to
+the set of nodes and indicates the set of features and E is the
+set of directed edges on the graph. The edge ⟨vi , v j ⟩ ∈ E
+denotes that variable vi ∈ V has a causal effect on
+variable v j ∈ V .
+The LiNGAM-SF method proposed in this article satisfies
+the following basic assumptions.
+1) The causal structure G is a directed acyclic graph.
+2) Causal faithfulness assumption.
+3) Causal Markov assumption.
+4) The causal relationship among the variables is linear,
+and their data obey the non-Gaussian distribution.
+5) The noise terms follow the non-Gaussian distribution
+and are independent of each other.
+It is assumed that the data set X ∈ Rn×d is obtained
+with the full observations, where n is the number of samples
+and d denotes the dimension of the feature space under full
+observation. The data on the node vi ∈ V are denoted as
+xi = X :,i . Since the data generation mechanism is assumed
+to be linearly non-Gaussian, the structural equation can be
+given
+X T = AX T + N
+
+(1)
+
+where A is the adjacency matrix of G and N ∈ Rd×n is the
+noise term of the corresponding variable. The element ai, j
+refers to the strength of the direct causal effect of v j ∈ V
+on vi ∈ V .
+For SFs, the observed features are not always complete.
+Assuming that at the time t, the data X o ∈ Rn×do from the
+set of variables Vt ⊂ V are observed, where do = |Vt |.
+As time progresses, new variables are introduced through
+streams, contributing to the expansion of the observed data’s
+dimension do . The data for the unobserved variables Vl ⊂ V
+are expressed as X l ∈ Rn×dl , where dl = |V − Vt |. According
+to the method in the literature [27], (1) can be transformed as
+follows:
+ T 
+ T  
+
+Xo
+Aoo Aol
+Xo
+No
+=
++
+(2)
+Al o
+Al l
+Nl
+Xl T
+Xl T
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10696
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+Fig. 2. Framework of the LiNGAM-SF, which is summarized in three steps. Step 1: learning the causal skeleton G t ′ (lines 2–6 of Algorithm 1). Step 2:
+transforming the causal skeleton G t ′ into a directed graph G t and providing a candidate set of latent confounders (line 7 of Algorithm 1). Step 3: detecting
+the latent confounders L t (line 8 of Algorithm 1).
+
+where No and Nl denote the noise terms on the observed
+variables Vt and the unobserved variables V − Vt , respectively.
+The matrix [ Aoo , Aol ; Al o , Al l ] in (2) corresponds to A in (1).
+Based on (2), X o T can be written as follows:
+X o T = Bo No + Bl Nl = B N
+
+(3)
+
+where Bo = (I − Aoo − Aol (I − Al l )−1 Al o )−1 and Bl =
+(I − Aoo − Aol (I − Al l )−1 Al o )−1 . Akbari et al. [21] explain
+that the element of matrix B in (3) indicates whether there is
+a causal path between the corresponding variables.
+At the time t, the current set of feature variables is Vt ,
+and the causal structure is denoted as G t . The LiNGAM-SF
+method is to learn the causal structure G t from the observable
+data X o .
+To ensure clarity, the important notations employed in this
+article are summarized in Nomenclature.
+B. Framework of LiNGAM-SF Method
+Compared with the existing CSLSF methods, the
+LiNGAM-SF method can both give a precise causal
+structure and detect latent confounders. To achieve this goal,
+this article designs the overall framework of the LiNGAM-SF
+method. Fig. 2 shows the LiNGAM-SF framework presented
+with the real structure of Fig. 1(b) as an example. In the
+frame diagram, the undirected graph or a locally directed
+graph at the time t can be expressed as G t ′ . The graph
+G t ′ = (V, E, U ) is also known as the causal skeleton, where
+U represents the set of undirected edges. The undirected
+edge is denoted as (vi , v j ) ∈ U , indicating that the causal
+direction between vi and v j needs to be further identified.
+The pseudocode of the whole process is given in Algorithm 1.
+C. Learning of Causal Skeleton
+The causal skeleton is an undirected graph constructed with
+feature variables. Unlike the maximal ancestral graph, the
+partial ancestral graph, and the directed acyclic graph, it does
+not contain directional information. Our method employs the
+MBCS* algorithm [20] and the CSBS algorithm [9] to learn
+
+Algorithm 1 LiNGAM-SF Algorithm
+Input: The causal structure G t−1 ; The observed data X o ;
+The feature sets Vt−1 and Vt ; The sampling rate r ; Two
+significant coefficients sig1 , sig2
+Output: The causal structure G t ; The set of latent confounders L t
+1: Initial L t ← ∅ and G t ← ∅;
+2: if Vt−1 is Empty then
+3:
+G t ′ ← MBCS*(Vt , X o , sig1 )
+4: else
+5:
+G t ′ ← CSBS(Vt−1 , Vt , X o , G t−1 , sig1 )
+6: end if
+▷ The code in lines 2-6 is step 1
+7: G t , L alter ← ICDPLV(G t ′ , X o , r , sig2 )
+▷ step 2
+8: L t ← DLC(G t , L alter , X o )
+▷ step 3
+9: return G t and L t
+
+the causal skeleton G t ′ without any steps to identify the
+direction.
+The MBCS* algorithm, a static method, is used for learning
+the initial skeleton G 1 ′ due to its efficiency. As new variables
+become observable, the CSBS algorithm dynamically updates
+the skeleton G t ′ , t ∈ {2, 3, 4, . . . , }. Supposed that the neighbor set of variable vi on the skeleton is denoted as N (vi ), the
+update requires that vi and its neighbor v j ∈ N (vi ) satisfy
+ the
+condition: vi ̸⊥⊥ v j |∅ and ¬∃s ⊆ N (vi ) s.t. vi ⊥⊥ v j |s [9].
+Notably, the directed edges of G t ′ are treated as undirected in
+each update. As shown in Fig. 2, the transformation from G 1 to
+G 2 ′ is a process during which the CSBS algorithm updates the
+skeleton. The CSBS treats the directed edge v3 → v1 in the G 1
+as an undirected edge. As the variable v8 is observable, v1 and
+v3 become independent given v8 . Therefore, the directed edge
+v3 → v1 is updated to the undirected path v3 − v8 − v1 .
+Both algorithms rely on CI tests. In our paper, we adopt the
+HSCI [29] with the significance parameter sig1 .
+Definition 1 (Observed Direct Path): Assume that there is
+a directed path vi → z 1 → z 2 → · · · → z k → v j in the
+graph. If all variables {z 1 , z 2 , . . . , z k } on the path are latent
+variables, the path is called the observed direct path.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+Fig. 3.
+
+10697
+
+Three possible structures.
+
+We present the following three structures according to
+Definition 1.
+1) Structure 1: There is an observed direct path between
+vi and v j , with neither variable affected by the latent
+confounders [see Fig. 3(a)]. It can be represented as
+vi → v j or v j → vi .
+2) Structure 2: Variables vi and v j are associated only due
+to confounding factor lk without any observed direct
+path between them [see Fig. 3(b)]. It can be denoted as
+vi ← lk → v j .
+3) Structure 3: There is an observed direct path between
+vi and v j ; both variables are affected by the latent
+confounder lk [see Fig. 3(c)]. It can be represented as
+vi ← lk → v j and vi → v j or v j → vi .
+Property 1: Two adjacent feature variables on the edge
+(vi , v j ) of the skeleton graph G t ′ only be one of the three
+structures mentioned above.
+Proof: When t = 1, the MBCS* is used to learn the
+initial skeleton. The literature [20] has demonstrated that the
+edge (vi , v j ) ∈ U in the G 0 ′ satisfies the form vi ↔ v j ,
+indicating that no set can m-separate vi from v j .
+When t = 2, 3 · · · , it can be proved by the inverse method
+that (vi , v j ) in the G t ′ learned by the CSBS also satisfies the
+form vi ↔ v j . Assuming that (vi , v j ) ∈ U does not follow the
+form vi ↔ v j , there are two cases to be discussed separately.
+1) vi is not directly connected to v j , and there is a undirected path between vi and v j that include at least one
+observed collider. According to the d-separation, it is
+known that the collider will block the paths of the feature
+variables vi and v j . Therefore, vi and v j are independent.
+The conclusion contradicts the condition vi ̸⊥
+⊥ v j |∅.
+2) vi is not directly connected to v j , and there are no
+colliders among the variables on the path between vi and
+v j . When there is no collider on the path, the relation
+between vi and v j is either vi ← z 1 ← · · · ← z t−1 ←
+z t → z t+1 → · · · → z m → v j , where z t is a confounder
+or a chain structure such as vi → z 1 → · · · → z m →
+v j . For both structures above, the paths of the feature
+variables vi and v j are blocked once under z 1 ∈ N (vi )
+or z m ∈ N (v j ). The situation is in contradiction with the
+
+condition vi ̸⊥⊥ v j |∅ and ¬∃s ⊆ N (vi ) s.t. vi ⊥⊥ v j |s .
+In summary, the edge (vi , v j ) ∈ U on G t ′ satisfies the form
+vi ↔ v j . The form reveals that variables vi and v j are not
+independent. Moreover, their dependence remains unchanged
+under other observed variables. Hence, vi and v j are associated
+through a path of latent variables, none of which are colliders.
+When there is no confounder on the path, the relationship
+between vi and v j belongs to structure 1. When there is exactly
+one latent variable acting as a confounder on the path, the
+relationship belongs to structure 2. When there are at least two
+confounders among the latent variables on the path, a collider
+
+Fig. 4.
+
+Procedure of the ICDPLV subalgorithm.
+
+must exist, and the relationship does not satisfy the form
+vi ↔ v j . Otherwise, the relationship between vi and v j can be
+a combination of structures 1 and 2. Therefore, our property
+is confirmed.
+□
+D. ICDPLV Algorithm
+The graph G 1 ′ , G 2 ′ , . . . , G t ′ represents the learned skeleton
+structure. To more precisely confirm the directed structures
+of the graph, we propose the ICDPLV subalgorithm based
+on the causal identifiability of the data. The subalgorithm
+distinguishes among the three previously described structures
+to provide the precise causal structure. It also gives a candidate
+set of latent confounders L alter . We denote a latent confounder
+using the variables it affects. For instance, in Structure 2 and
+Structure 3, the latent confounder lk is indicated by [vi , v j ].
+The whole procedure of the subalgorithm is shown in Fig. 4.
+1) Proposition 1: Proposition 1 is prepared to exclude the
+possibilities of Structure 2 and Structure 3 affected by latent
+confounders and to identify the causal direction of two variables in Structure 1. Although existing research has provided
+lemmas and propositions for identifying causal directions and
+DLCs, their assumptions require that the latent variables must
+only include latent confounders. They are unable to handle the
+situation where latent mediators v8 are present in Fig. 1(b).
+Therefore, we extend the existing lemmas and propositions
+and present Proposition 1.
+Theorem 1 (D-S Theorem [13]): Define two random variables y1 and y2 as linear combinations of independent random
+variables si for i = 1, . . . , q
+y1 =
+
+q
+X
+i=1
+
+bi si ,
+
+y2 =
+
+q
+X
+
+ci si .
+
+(4)
+
+i=1
+
+If there is a non-Gaussian si with bi ci ̸ = 0, y1 and y2 are
+dependent.
+Based on Theorem 1, this article gives the following proposition to identify Structure 1.
+Proposition 1: Assuming that the existing assumptions are
+fulfilled, for the edge (vi , v j ) in the graph G′t , the residual
+is denoted as ri ( j ) = xi − (cov xi , x j /var x j ) × x j . If the
+residual is independent of the data x j of the variable v j , then
+v j → vi , and the two variables are not affected by the latent
+confounders.
+To clarify the proof of Proposition 1, we provide the
+following definition.
+Definition 2 (Branch Variable Set): Assuming that all variables are fully observed, the directed path vi → z 1 →
+· · · → z t → · · · → z k → v j in the graph G is denoted
+as P(vi , v j ). For any variable z t on the path P(vi , v j ), the
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10698
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+branch variable set of H (P(vi , v j ), z t ) is defined as Pa(z t ) \
+{vi , z 1 , . . . , z k , v j }, where Pa(z t ) represents the parent variables of z t . The overall branch variable
+set for the path
+S
+P(vi , v j ) is given by H (P(vi , v j )) = kt=1 H (P(vi , v j ), z t ).
+Proof: We can assume that either vi → v j or both variables are influenced by common latent confounders L. For any
+xi ∈ xi and x j ∈ x j , all paths from vi P
+to v j can be expressed
+with a structural equation as af
+g
+e1 ,
+j,i x i +
+j,h x h + n
+h∈H (vi ,v j ) a
+where af
+and
+a
+g
+denote
+the
+total
+product
+of
+path
+coefj,i
+j,h
+ficients along P(vi , v j ) and from the branch variables set
+H (P(vi , v j )) to v j , respectively. The variable ne1 is a linear
+combination of noise terms correlated with multiple latent
+variables along the path. Similarly, the contribution from the
+confounders
+P l ∈ L to variable v j , excluding vi , is given by
+af
+g
+e2 , where P(l, v j ) \ vi refers
+j,l xl +
+j,h x h + n
+h∈H (P(l,v j )\vi ) a
+to all paths from l to v j , which do not include vi . Thus, the
+data x j can be formatted by the following structural equation:
+
+
+X
+ag
+e1 
+x j = baf
+j,i x i +
+j,h x h + n
+h∈H (P(vi ,v j ))
+
+
+X
+X
++ c
+af
+j,l xl +
+
+l∈L h∈H (P(l,v j )\vi )
+
+l∈L
+
+X
+
++
+
+(5)
+
+where Pa ′ (v j ) denote the nodes in Pa(v j ), which are not on
+paths P(vi , v j ) and P(l, v j ) \ vi , n j is the noise term for v j ,
+and b and c indicate the path existence. The variables b and
+c satisfy b, c ∈ 0, 1 and b + c ̸ = 0. Similarly, xi is expressed
+as follows:
+X
+X
+X
+xi = c(
+af
+af
+e3 )
+i,l xl +
+i,h x h + n
+l∈L h∈H (P(l,vi ))
+
+X
+
++
+
+ai, p x p + n i
+
+(6)
+
+p∈Pa ′ (vi )
+
+where Pa ′ (vi ) denote the nodes in Pa(vi ) that are not on the
+path P(l, vi ). There are three cases.
+1) When b = 1 and c = 1, the relationship vi → v j with a
+common latent confounder belongs to Structure 3. The residual
+ri ( j) is calculated as the following equation:
+ri ( j)
+X
+=
+(f
+ai,l − s af
+f
+f
+e3
+j,i a
+i,l − s a
+j,l )xl + (1 − s af
+j,i )n
+l∈L
+
++
+
+X
+
+X
+
+l∈L h∈H (P(l,vi ))
+
+X
+
++
+
+(af
+e1
+i,h − s af
+j,i af
+i,h )x h + (1 − s af
+j,i )n i − s n
+
+(ai, p − s af
+j,i ai, p )x p − s
+
+p∈Pa ′ (vi )
+
+−s
+
+X
+h∈H (P(vi ,v j ))
+
+ag
+j,h x h − s
+
+X
+
+X
+p∈Pa ′ (v j )
+
+a j, p x p − s ne2
+
+X
+
+l∈L h∈H (P(l,v j )\vi )
+
+h∈H (P(vi ,v j ))
+
+ag
+j,h x h − s
+
+ag
+j,h x h − sn j
+
+(7)
+
+
+
+where s = (cov xi , x j /var x j ). If cov xi , x j = 0, the
+coefficient of ne3 on ri ( j) is nonzero. Thus, ri ( j) is dependent
+of x j according to Theorem 1. If cov xi , x j ̸ = 0, both ne1
+
+X
+
+a j, p x p − sn j . (8)
+
+p∈Pa ′ (v j )
+
+If cov(xi , x j ) = 0, the coefficient of nei on ri ( j) is nonzero.
+When cov(xi , x j ) ̸ = 0, ne1 on ri ( j) is nonzero. Therefore, in this
+situation, ri ( j) is still dependent of x j due to Theorem 1.
+3) When b = 0 and c = 1, vi and v j are only affected by
+confounders, belonging to Structure 2. The following is the
+calculation of the residual ri ( j) :
+X
+X
+X
+ri ( j) =
+(f
+ai,l − s af
+af
+e3
+i,l )xl +
+i,h x h + n
+l∈L h∈H (P(l,vi ))
+
+l∈L
+
+X
+
++
+
+ai, p x p + n i − s
+
+X
+
+X
+
+a j, p x p
+
+p∈Pa ′ (v j )
+
+X
+
+l∈L h∈H (P(l,v j )\vi )
+
+p∈Pa ′ (v j )
+
+l∈L
+
+X
+
+−s
+
+−s
+
+ag
+e2 
+j,h x h + n
+
+a j, p x p + n j
+
+p∈Pa ′ (vi )
+
+p∈Pa ′ (vi )
+
+
+X
+
+and ne2 have nonzero coefficients on ri ( j) , showing that the
+dependence remains.
+2) When b = 1 and c = 0, the relationship vi → v j without
+any confounders belongs to Structure 1. The residual ri ( j) is
+calculated as the following equation:
+X
+(ai, p − s af
+e1
+ri ( j) =
+j,i ai, p )x p + (1 − s af
+j,i )n i − s n
+
+ag
+e2 − sn j .
+j,h x h − s n
+
+(9)
+
+
+If cov xi , x j ̸ = 0, the coefficient of ne2 for s = ri ( j) is
+nonzero. The finite-time linear combination of non-Gaussian
+data xl still
+meets the non-Gaussian distribution. When
+
+cov xi , x j = 0, the coefficient of xl is nonzero.
+In summary, x j ∈ x j and ri ( j) ∈ ri ( j ) are dependent in all
+cases, which contradicts what is known. Hence, Proposition 1
+is proven.
+□
+The HSCI method is retained for the CI test in Proposition 1.
+The significance parameter for the CI test in Proposition 1 is
+labeled as sig2 .
+2) Proposition 2: Proposition 1 determines whether the
+structure between vi and v j is Structure 1. Furthermore,
+Proposition 2 shows that the matrix B̃ ′ can distinguish between
+Structure 2 and Structure 3. The matrix B̃ ′ originates from [27]
+and fundamentally acts as an approximation of matrix B.
+The matrix B is described in (3). The element of matrix B,
+as discussed in [27], shows whether a causal path is present
+between the related variables. Thus, we can determine whether
+the causal path exists by using B̃ ′ instead of B. In our work,
+we employ the RICA algorithm to calculate B̃ ′ , setting the
+sampling parameter r to ensure result reliability [30]. The
+lemma in [27] gives the necessary and sufficient condition
+for causal path existence between variables.
+Lemma 1 [27]: Given the faithfulness assumption, there is
+a causal path from the observed variable vi to v j if and only
+if the corresponding two-row vectors B̃ ′ i,: and B̃ ′ j,: in the
+matrix B̃ ′ satisfy n 0∗ > 0 and n ∗0 = 0, where n 0∗ means the
+number of columns in [ B̃ ′ i,: , B̃ ′ j,: ] whose first element is zero
+and the second is nonzero, and n ∗0 is the number of columns
+in [ B̃ ′ i,: , B̃ ′ j,: ] whose first element is nonzero and the second
+is zero.
+With Lemma 1 as a basis, we derive Proposition 2, which
+distinguishes Structure 2 from Structure 3 and identifies the
+causal direction.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+Proposition 2: Given the faithfulness assumption, if two
+variables (vi , v j ) at the edge G t ′ are affected by the confounders, then the matrix B̃ ′ can distinguish whether their
+structure is Structure 2 or Structure 3.
+Proof: If the two variables vi and v j in (vi , v j ) ∈ U are
+affected by the confounders, it can be known from Property 1
+that the two variables can only be Structure 2 or Structure 3.
+If two-row vectors B̃ ′ i,: and B̃ ′ j,: in the matrix B̃ ′ satisfy
+n 0∗ > 0 and n ∗0 = 0, it implies the presence of a causal path
+between two variables according to the Lemma 1. Therefore,
+the structure of the two variables belongs to Structure 3,
+in which there is a causal path between the two variables.
+Conversely, it belongs to Structure 2, in which there is no
+causal path between the two variables. In conclusion, the
+matrix B̃ ′ can distinguish between the two structures.
+□
+To facilitate a clear understanding of the Matrix B̃ ′ and
+Proposition 2, we present the following examples.
+Example 1: We apply the ICDPLV to the data generated
+according to Fig. 1(b). All the examples in the subsequent text
+adopt the same data. When t = 1, the LiNGAM-SF method
+constructs the skeleton structure G ′1 shown in Fig. 2 for the
+arrived variables v1 , v2 , and v3 . The ICDPLV needs to perform
+operations on the three edges (v1 , v2 ), (v2 , v3 ), and (v1 , v3 ).
+It can be known from Proposition 1 that r1 (3) and r2 (3) are
+independent of x3 respectively. Therefore, the directed edges
+⟨v3 , v1 ⟩ and ⟨v3 , v2 ⟩ are determined. For the undirected edge
+(v1 , v2 ), it does not satisfy the conditions of Proposition 1,
+indicating that v1 and v2 are affected by confounders. The two
+vectors obtained by the RICA technique are given as follows:
+
+ 
+
+0.1036
+1
+0 1
+≈
+.
+(10)
+1
+0.1307
+1 0
+According to Proposition 2, the relationship between v1 and
+v2 is Structure 2. Therefore, when t = 1, the causal graph
+output by ICDPLV is G 1 in Fig. 2.
+Example 2: When new variables {v4 , v5 , v8 } arrive, the
+structure of G 1 is updated to G ′2 in Fig. 2. We execute the
+ICDPLV on G ′2 . For the undirected edge (v4 , v5 ) on G ′2 ,
+Proposition 1 detects that it is affected by the confounders and
+marks it as [v4 , v5 ]. The RICA gives the vector of {v4 , v5 } as
+follows:
+
+ 
+
+0.2528 0.8588
+0 1
+≈
+.
+(11)
+0.8006 0.7916
+1 1
+The two row vectors fulfill the conditions: n 0∗ > 0 and
+n ∗0 = 0. Hence, the relationship between v4 and v5 belongs to
+Structure 2. The undirected edge (v4 , v5 ) is updated to ⟨v4 , v5 ⟩.
+3) ICDPLV Subalgorithm: This article proposes the ICDPLV subalgorithm based on the above two propositions.
+For the set of undirected edges, the ICDPLV first identifies
+Structure 1 by Proposition 1, and the causal direction between
+the variables can be identified (lines 3–11 in Algorithm 2).
+Next, Proposition 2 is employed to distinguish between
+Structure 2 and Structure 3, thereby providing the causal
+direction between variables (lines 12–19 in Algorithm 2).
+In Structure 2 and Structure 3, the latent confounders are
+unobservable and unknown. However, their existence can be
+detected, and they are saved in L alter (line 9 in Algorithm 2).
+The details of the ICDPLV subalgorithm are demonstrated in
+Algorithm 2.
+
+10699
+
+Algorithm 2 ICDPLV Subalgorithm
+Input: The local directed graph G ′t ; The observed data X o ;
+The sampling rate r ; The significant coefficients sig2
+Output: The causal structure G t ; The candidate set of latent
+confounders L alter ;
+1: Initial T ← ∅, G t ← ∅ and L alter ← ∅;
+2: Find a set U of undirected edges from G ′t ;
+3: for all ei = (vm , vn ) ∈ U do
+4:
+Identify the direction via Proposition1 with sig2
+5:
+if vm −→ vn or vn −→ vm then
+6:
+Update (vm , vn ) on G ′t ;
+7:
+else
+8:
+T ← T ∪ (vm , vn )
+9:
+L alter ← L alter ∪ [vm , vn ]
+10:
+end if
+11: end for
+12: for all ei = (vm , vn ) ∈ T do
+13:
+Distinguish the structures via Proposition2 with r
+14:
+if vm −→ vn or vn −→ vm then
+15:
+Update (vm , vn ) on G ′t
+16:
+else
+17:
+Delete undirected edge (vm , vn ) on G ′t
+18:
+end if
+19: end for
+20: G t ← G t ′
+21: return G t , L alter ;
+
+Fig. 5. Possible cases in the candidate set of latent confounders. (a) Observed
+confounders and latent confounders. (b) Common latent confounder influencing multiple variables.
+
+E. DLCs Algorithm
+The latent confounders L alter detected by the ICDPLV subalgorithm cannot be taken as the final outcome. The reasons are
+given as follows. First, as shown in Fig. 5(a), the ICDPLV finds
+that variables v1 and v2 are affected by latent confounders.
+The ICDPLV regards the observed variable v3 as a latent
+confounder because it only analyzes the relationship between
+two variables on an undirected edge each time. It leads to
+a situation where the latent confounder detected is just the
+observed variable v3 in G t , potentially along with other latent
+confounders such as l1 . The situation is regular in SF scenarios,
+where the variable that is a latent confounder at the time t
+may become an observable variable at the time t + 1. Second,
+as shown in Fig. 5(b), the ICDPLV detects the presence of
+a confounder on the variables v1 and v5 , as well as on the
+variables v4 and v5 . However, v1 , v5 , and v6 might be affected
+by a common latent confounder l1 .
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10700
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+TABLE II
+S TATISTICAL R ESULTS
+
+For the case of Fig. 5(a), a solution has been given in the
+literature [13]. It proves theoretically that the residuals ri ( j )
+of the variable vi can be used as a new input to eliminate the
+influence of observed confounder v j . Therefore, the observed
+data of the variables xi are replaced by the residuals ri ( j ) .
+After removing the effect of the confounder, Proposition 1
+in Section III-D will again be used to judge whether the
+relationship between two variables is Structure 1 unaffected by
+the confounders. If they belong to structure 1, the suspicious
+element will be eliminated from the candidate set. Otherwise,
+it will be retained.
+Example 3: When t = 1, the ICDPLV outputs L alter =
+[v1 , v2 ] in Fig. 2. We can observe that variables v1 and v2 have
+a common ancestor v3 in G 1 . Therefore, the DLC needs to
+eliminate the influence of v3 . The data of v1 and v2 are updated
+to r1 (3) and r2 (3) , respectively. Proposition 1 makes another
+judgment on the new data of v1 and v2 . Since their new data
+are still related to their residuals, the variables v1 and v2 are
+still affected by the latent confounders.
+The DLC subalgorithm needs to detect the common confounder, as shown in Fig. 5(b), but the task is challenging.
+We analyze the structure with the common confounder,
+as shown in Fig. 5(b). With Vcom = {v1 , v2 , . . . , v p } sharing a
+common confounder l, the structure exhibits Property 2.
+Property 2: For the structure with the common confounder,
+the algorithm will output ( p( p − 1)/2) confounders of the
+same form as vi ← lk → v j , where vi , v j ∈ {v1 , v2 , . . . , v p }
+and i ̸ = j. The latent confounder is denoted as lk , k =
+1, 2, . . . , ( p( p − 1)/2).
+Proof: Any two features vi , v j ∈ {v1 , v2 , . . . , v p } are not
+directly causal, so vi ⊥
+⊥ v j |l. However, l is a latent variable,
+and then, vi and v j satisfy ¬∃s ⊆ Vt − {vi , v j } s.t.(vi ⊥
+⊥ v j |s). Therefore, the method in Section III-C will create an
+undirected edge for vi and v j . Since any two of the p variables
+can form such an edge, ( p( p − 1)/2) undirected edges are
+provided for the ICDPLV to judge. In fact, the common
+confounder causes ICDPLV to output ( p( p − 1)/2) candidate
+latent confounders with the same form as vi ← lk → v j . □
+According to Property 2, the DLC gives an acceptable
+solution to detect the common latent confounders. Suppose
+that there are p variables in the candidate set L alter , which
+do not have any causal relationship with each other and
+satisfy Property 2. In that case, the DLC will consider the
+p variables as having the same confounders. The p variables
+with ( p( p−1)/2) different confounders also satisfy Property 2.
+Later, we call this type of structure a fully connected structure
+for short. However, there are too few fully connected structures
+in the real causal structure. The statistical results are given in
+Table II to verify the point. Therefore, the DLC can give an
+acceptable result in detecting the common latent confounders.
+The details of the DLC subalgorithm are shown in
+Algorithm 3. The main purpose of the DLC subalgorithm
+is to detect the latent confounders from the candidate set
+
+given by the ICDPLV. The DLC first removes the effect
+of confounders from the observed variables by residuals
+(lines 2–17 in Algorithm 3) and then detects the common
+confounders based on Property 2 (lines 18–21 in Algorithm 3).
+Finally, the DLC outputs the detected latent confounders.
+Algorithm 3 DLC Subalgorithm
+Input: The causal structure G; The candidate set of latent
+confounders L alter ; The observed data X o ; The latent
+confounders L t−1 output at the time t − 1
+Output: The set of latent confounders L t ;
+1: Initial LC ← ∅ and L t ← ∅
+2: [v1 , v2 , . . . , vn ] ∈ L t−1 are split into ( p( p − 1)/2) confounders
+3: L alter ← L alter ∪ L t−1
+4: for each vi , v j in L alter do
+5:
+Find observed confounders lk of vi and v j in G
+6:
+LC(vi ) ← LC(vi )∪ lk
+7:
+LC v j ← LC v j ∪ lk
+8: end for
+9: T ←all feature variables t in LC
+10: for each t in T do
+11:
+Compute the residual r on LC(t)
+12:
+X o (:, t) ← r ;
+13: end for
+
+14: for each vi , v j in L alter do
+15:
+if Check vi and v j are not influenced by latent confounders based on Proposition
+1 then
+
+16:
+L alter ← L alter − vi , v j
+17:
+end if
+18: end for
+19: if The set Vcom that
+ satisfies Property 2 then
+20:
+Delete vi , v j in L alter , vi , v j ∈ Vcom
+21:
+L t ← L t ∪ [v1 , v2 , . . . , vn ]
+22: end if
+23: L t ← L t ∪ L alter
+24: return L t ;
+IV. E XPERIMENTS
+A. Experimental Preparation
+We conduct the experiments with a standard PC on
+MATLAB R2018b. It is important to note that the experiments
+utilized all observational data without partitioning it into training and testing sets. The approach to evaluation is to compare
+the learned results with the ground truth (real structure).
+1) Dataset: 1) The synthetic data are generated based on
+real causal structures derived from the Bayesian Network
+Repository1 and randomly generated networks. Table III summarizes these structures. To satisfy linear non-Gaussianity,
+data is generated following (1). The causal intensity A ranges
+over [−1, 0) ∪ (0, 1], and the noise N is uniformly distributed
+over (−1, 1), ensuring independence and non-Gaussianity.
+Each structure has 1000 data samples.
+2) The real data are from the Yahoo Finance database.2
+We obtain daily closing prices from August 30, 2013, to
+1 Bayesian
+2 Yahoo
+
+network repository: https://www.bnlearn.com/bnrepository/.
+finance database: https://help.yahoo.com/kb/sln2311.html.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+10701
+
+Fig. 6. Parameter sensitivity analysis. (a) Precision results for three parameters under different values. (b) Recall results for three parameters under different
+values. (c) F1 value results for three parameters under different values.
+
+TABLE III
+D ETAILED I NFORMATION OF THE C AUSAL S TRUCTURE
+
+August 29, 2023, for three index funds: U.S. Dow Jones
+Industrial (DJI) Average, Japanese Nikkei 225 (N225), and
+Hong Kong Hang Seng Index (HSI). Following the data
+preprocessing methodology from [27], let c(t) denote the
+closing price on day t. The return R(t) is defined as: (c(t) −
+c(t − 1)/c(t − 1)). We utilize index returns as feature variables
+to investigate the causal relationships between indices. The
+preprocessed dataset consists of 2153 samples with three
+features.
+2) Comparison Methods: The CSBS [9], the CSSU [10],
+and the PRCDSF [12] are current CSLSF methods for linear
+relationships, so they are chosen as comparison methods.
+To validate the advantages of partitioning the data into SFs,
+the one-time learning methods such as L-MARVEL [21],
+M3 HC [23], and ParceLiNGAM [25] are also employed as
+comparison methods.
+3) Evaluation Metrics: The comparison metrics of the
+methods contain three items: precision P, recall R, and
+F1 value. The precision is the percentage of correct causal
+relationships among learned causal relationships between two
+observed feature variables. The recall calculates the percentage
+of correct causal relationships among true causal relationships
+between two observed feature variables. The F1 value is
+calculated as 2 × P × R/(P + R).
+B. Parameter Sensitivity Analysis
+There are three parameters for the LiNGAM-SF method.
+They are the sampling rate r and two significant coefficients,
+
+Fig. 7.
+
+Three comparison metrics on ALARM under SFs.
+
+Fig. 8.
+
+Three comparison metrics on HEPAR2 under SFs.
+
+sig1 and sig2 . The performance of the method in terms of
+the precision, recall, and F1 value is observed by letting r
+vary from 0 to 1 with a step size of 0.1 and letting sig1 and
+sig2 vary from 0.001 to 0.1 with a step size of 0.011. The
+parameter sensitivity is analyzed on the structures: CHILD,
+HAILFINDER, MILDEW, and PATHFINDER. The precision,
+recall, and F1 values in Fig. 6 are the average values obtained
+on the four structures.
+Fig. 6(a) indicates that the smaller the sig1 , the higher the
+precision. Fig. 6(b) reveals that the smaller the sig2 , the higher
+the recall rate. In Fig. 6(b), when r = 0.7 and sig2 = 0.001,
+the recall rate can reach above 0.66. In summary, the three
+parameters in the experiments are set as r = 0.7, sig1 = 0.001,
+and sig2 = 0.001, respectively.
+C. Comparative Experiments
+1) Synthetic Data:
+a) Streaming features: To simulate the scenario of SFs,
+the data are partitioned into batches based on feature variables
+and then fed into all methods in batches. Each batch randomly
+includes k features, with k respectively assigned as 2, 5, 5,
+10, and 10 for five sizes of causal structures: small, medium,
+large, very large, and massive. The results are averaged over
+ten experimental runs, with data regenerated for each run to
+meet the dataset requirements described in Section IV-A.
+Figs. 7–10 present the precision, recall, and F1 values across
+different time points for the ALARM, HEPAR2, PIGS, and
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10702
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+TABLE IV
+C OMPARISON E XPERIMENTS ON THE C OMPLETE DATA —PART A
+
+Fig. 9.
+
+Three comparison metrics on PIGS under SFs.
+
+Fig. 11.
+
+Fig. 10.
+
+Three comparison metrics on MUNIN under SFs.
+
+MUNIN structures under SFs. Our method, represented by
+the red line, demonstrates consistently superior performance
+in terms of precision and F1 values throughout the entire
+temporal phase compared to all baseline methods.
+The comparison algorithms M3 HC, ParceLiNGAM, and
+L-MARVEL are representatives of causal structure methods
+with latent variables. The ParceLiNGAM fails to generate
+results within the 2-h time limit when the number of feature variables exceeds 70. Similarly, M3 HC and L-MARVEL
+exceed this computational threshold when feature variables
+exceed 700. The limitation of their one-time learning prevents
+them from coping with the incremental features.
+b) Complete data: Tables IV and V summarize the
+performance metrics for complete data across 15 structures,
+with “-” indicating a 2-h timeout. Compared to the best
+baseline, our method achieves 11% higher precision on aver-
+
+Analysis on error results.
+
+age. The performance gap widens for high-dimensional cases
+(>1000 variables), where our F1 values exceed state-of-the-art
+results by 59% on average. Compared to other methods, ParceLiNGAM achieves the highest recall on SACHS,
+BARLEY, INSURANCE, and WATER structures. However,
+it lacks the capability to learn causal structures in highdimensional data. In higher dimensional cases, both M3 HC and
+L-MARVEL face similar challenges. Therefore, we suggest
+dividing high-dimensional complete data into SFs, employing
+the batch-learning method to learn causal structure.
+The CSBS, CSSU, PRCDSF, and M3 HC methods rely on
+scoring to identify directions, but, as noted in Section I, this
+approach is unreliable. Taking the DIABETES structure as an
+example, these methods produce excess and reversed edges,
+resulting in poor outcomes (see Fig. 11). In contrast, the
+L-MARVEL method, which uses d-separation to identify
+causal directions, cannot distinguish Markov equivalence
+classes, leading to numerous undirected edges, as shown in
+Fig. 11. As shown in Fig. 12, LiNGAM-SF achieved over 90%
+precision in learning undirected edges, closely approximating
+the final outcomes. The ability to precisely learn causal
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+10703
+
+TABLE V
+C OMPARISON E XPERIMENTS ON THE C OMPLETE DATA —PART B
+
+in the financial industry. Moreover, when t = 3, only the
+proposed method gives the same results as in the literature [27]
+and [31].
+
+Fig. 12.
+
+Results on the precision of the learned undirected edges.
+
+structures through causal identifiability is a key factor in the
+method’s success.
+The time efficiency of each method is recorded in
+Tables IV and V. Although our method shows little time
+advantage with fewer features, it becomes more efficient as
+feature numbers grow, reusing prior regression results rather
+than recalculating. This allows it to outperform other comparison methods. With hundreds of features, it ranks third in time
+usage but yields the most precise causal structure, making the
+time tradeoff worthwhile.
+2) Real Data: For real data, the return values of three
+indices funds HSI, N225, and DJI are observed respectively at
+the time t = 1, 2, 3. The output of each method at each time
+is shown in Fig. 13. The existing CSLSF method establishes a
+causal relationship for indices HIS and N225 when t = 2, but
+its correctness is yet to be proven. In contrast, the proposed
+method finds that there is a latent confounder for the two
+indices. The conclusion is explainable because the index DJI
+affects indices N255 and HIS. The conclusion is a consensus
+
+D. Latent Confounders Detection for SFs
+1) Synthetic Data: For synthetic data, this section employs
+four cases to illustrate that the LiNGAM-SF method can detect
+latent confounders.
+Case 1: For the structure WIN95PTS, the variable Problem6
+is assumed to be observed at the time t = 1. Next, two feature
+variables GrbldPS and AvlblVrtlMmry are observed at the time
+t = 2. The real causal structure is shown in Fig. 14(a).
+When the variables GrbldPS and AvlblVrtlMmry are
+observable,
+the
+ICDPLV
+outputs
+the
+structure
+AvlblVrtlMmry→ GrbldPS→Problem6 for three variables.
+Meanwhile, it provides the candidate set of latent confounders
+[Problem6, GrbldPS]. Since Problem6 and GrbldPS do not
+share a common confounder in the structure and do not
+satisfy Property 2, [Problem6, GrbldPS] is the output of the
+DLC. In all figures of this section, the latent confounders are
+consistently denoted as L.
+Case 2: For the structure BARLEY, it is assumed that the
+two variables exptgens and forfrugt are observed at the time
+t = 1. Then, potnmin is observed at the time t = 2. The real
+structure is shown in Fig. 15(a).
+At the time t = 1, the LiNGAM-SF method outputs the
+causal structure forfrugt→potnmin. After observing the feature
+variable potnmin, the ICDPLV updates the causal structure to
+potnmin← forfrugt →potnmin and outputs the candidate set
+[potnmin,exptgens]. Unlike Case 1, potnmin and exptgens have
+an observed confounder forfrugt. Therefore, the DLC needs to
+remove the effect of the confounder forfrugt and then judge
+whether potnmin and exptgens are still under the influence of
+the latent confounder through Proposition 1. Eventually, the
+algorithm detects that potnmin and exptgens are still affected
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10704
+
+Fig. 13.
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+Results on the real data.
+
+Fig. 14. Latent confounder detection is performed on Case 1. (a) Real
+Structural. (b) t = 1. (c) t = 2 after step 1. (d) t = 2 after step 2. (e) t = 2 after
+step 3.
+
+by the latent confounder L except for the influence of forfrugt,
+as shown in Fig. 15.
+Case 3: For the structure WATER, it is assumed that two
+variables C_NI_12_00 and CBODD_12_15 are observed when
+t = 1. Subsequently, CKND_12_15 and CKNN_12_15 are
+observed when t = 2. The real structure is shown in Fig. 16(a).
+The LiNGAM-SF method outputs the causal structure C_NI_12_00→CBODD_12_15 at the time t = 1.
+After observing the feature variables CKND_12_15 and
+CKNN_12_15, the LiNGAM-SF first learns two undirected
+edges: (CKNN_12_15, CKND_12_15) and (CKND_12_15,
+CBODD_12_15). Then, the ICDPLV subalgorithm outputs the candidate sets [CKNN_12_15, CKND_12_15] and
+[CKND_12_15, CBODD_12_15]. It states that the latent
+confounders cause the two undirected edges to be generated. Thus, observed feature variables CKNN_12_15 and
+CKND_12_15 are isolated nodes, while the causal structure C_NI_12_00→CBODD_12_15 is retained anyhow. Since
+the three feature variables CKNN_12_15, CKND_12_15, and
+CBODD_12_15 in the candidate sets do not satisfy Property 2,
+the DLC subalgorithm finally concludes that they do not have
+the common latent confounder. Two latent confounders L 1 and
+L 2 are detected, as illustrated in Fig. 16(e).
+Case 4: For the structure HEPAR2, it is assumed that
+two feature variables amylase and fat are observed at the time
+t = 1. Next, upper_pain is observed when t = 2. The real
+structure is shown in Fig. 17(a).
+When t = 1, the LiNGAM-SF successfully detects a latent
+confounder [amylase, fat] between amylase and fat. With the
+
+Fig. 15. Latent confounder detection is performed on Case 2. (a) Real
+Structural. (b) t = 1. (c) t = 2 after step 1. (d) t = 2 after step 2. (e) t = 2 after
+step 3.
+
+Fig. 16. Latent confounder detection is performed on Case 3. (a) Real
+Structural. (b) t = 1. (c) t = 2 after step 1. (d) t = 2 after step 2. (e) t = 2 after
+step 3.
+
+variable upper_pain observed when t = 2, the undirected
+edges (upper_pain, amylase) and (upper_pain, fat) are formed.
+Since the ICDPLV finds that they belong to Structure 2, the
+candidate set contains [upper_pain, amylase], [upper_pain,
+fat], and [amylase, fat] output at the time t = 1. They are
+fed into the DLC for further identification. The variables in
+the candidate set do not have an observed confounder and
+conform to property 2. Thus, amylase, fat, and upper_pain
+have the common latent confounder L, as shown in Fig. 17(e).
+2) Real Data: For real financial data, this section assumes
+that three indices funds HIS, N225, and DJI enter the observation in turn. The LiNGAM-SF method gives the latent
+confounder detection results for each time, as shown in Fig. 18.
+When t = 1, only one variable HIS is observed, and the
+proposed method cannot give more information. As the N225
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+ZHANG et al.: LiNGAM-SF: CAUSAL STRUCTURAL LEARNING METHOD
+
+10705
+
+TABLE VI
+A BLATION E XPERIMENT W ITH T WO P ROPOSITIONS
+
+increase or remain constant, regardless of the LiNGAMSF_Del2’s correctness.
+In summary, Proposition 1 is concerned with the precision, while Proposition 2 focuses on the recall. Therefore,
+Propositions 1 and 2 of the ICDPLV are indispensable.
+
+Fig. 17. Latent confounder detection is performed on Case 4. (a) Real
+Structural. (b) t = 1. (c) t = 2 after step 1. (d) t = 2 after step 2. (e) t = 2 after
+step 3.
+
+Fig. 18.
+
+V. C ONCLUSION
+In this article, we investigate linear non-Gaussian data and
+propose the LiNGAM-SF method for SFs to learn a precise
+causal structure and detect latent confounders. The proposed
+method designs the ICDPLV subalgorithm to precisely identify
+the direction of the observed variables and output a candidate
+set of latent confounders. In addition, the proposed method
+provides the DLC subalgorithm based on Property 2 to further
+detect the latent confounders.
+Although the method demonstrates significant advantages
+under SFs, future research should focus on boosting efficiency
+by refining CI testing and implementing distributed deployment. In addition, domain transfer can be used to enhance
+generalization, with causal structures from one source guiding
+the learning of SFs in different domains.
+
+Latent confounder detection is performed on real data.
+
+R EFERENCES
+index is observed, the LiNGAM-SF detects the existence of
+a latent confounder. The DJI index confirms the plausibility
+of the latent confounder when t = 3. The proposed method
+finds that the latent confounder is still present when t = 3.
+In addition, the latent confounder L is common to all three
+indices. In reality, it could be an event or a policy that can
+cause a common change in DJI, HIS, and N225 indexes. The
+situation is consistent with the perception of financial markets.
+E. Ablation Experiment
+The ICDPLV subalgorithm applies Propositions 1 and 2
+to differentiate between the three structures and identify
+causal directions. To assess the impact of these propositions, we conduct ablation experiments, removing components
+based on Proposition 1 (LiNGAM-SF_Del1) and Proposition 2
+(LiNGAM-SF_Del2). Table VI presents the results when all
+feature variables are observed.
+The results of the LiNGAM-SF_Del1 method reveal the
+importance of Proposition 1. The LiNGAM-SF_Del1 that
+does not use Proposition 1 to learn the structures declined
+at precision, recall, and F1 values.
+LiNGAM-SF_Del2 shows that excluding Proposition 2 significantly reduces recall while barely improving precision.
+Proposition 2 takes a further step on the result of Proposition 1
+to distinguish between structures. The recall rate will either
+
+[1] R. Cai, W. Chen, K. Zhang, and Z. Hao, “A survey on non-temporal
+series observational data based causal discovery,” Chin. J. Comput.,
+vol. 40, no. 6, pp. 1470–1490, 2017.
+[2] C. Glymour, K. Zhang, and P. Spirtes, “Review of causal discovery
+methods based on graphical models,” Frontiers Genet., vol. 10, p. 524,
+Jun. 2019.
+[3] R. Guo, L. Cheng, J. Li, P. R. Hahn, and H. Liu, “A survey of
+learning causality with data: Problems and methods,” ACM Comput.
+Surv., vol. 53, no. 4, pp. 1–37, Jul. 2021.
+[4] X. Jia, B. Kuo, and M. M. Crawford, “Feature mining for hyperspectral image classification,” Proc. IEEE, vol. 101, no. 3, pp. 676–697,
+Mar. 2013.
+[5] W. Pan, L. Chen, and Z. Ming, “Personalized recommendation with
+implicit feedback via learning pairwise preferences over item-sets,”
+Knowl. Inf. Syst., vol. 58, no. 2, pp. 295–318, Feb. 2019.
+[6] J. Yang, Z. Wang, G. Wang, Y. Liu, Y. He, and D. Wu, “Osfs-vague:
+Online streaming feature selection algorithm based on vague set,” CAAI
+Trans. Intell. Technol., vol. 9, no. 6, pp. 1–16, 2024.
+[7] X. Wu, K. Yu, W. Ding, H. Wang, and X. Zhu, “Online feature selection
+with streaming features,” IEEE Trans. Pattern Anal. Mach. Intell.,
+vol. 35, no. 5, pp. 1178–1192, May 2013.
+[8] K. Yu, X. Wu, W. Ding, and H. Wang, “Exploring causal relationships
+with streaming features,” Comput. J., vol. 55, no. 9, pp. 1103–1117,
+Sep. 2012.
+[9] X. Guo and J. Yang, “Causal structure learning algorithm based on
+streaming features,” in Proc. IEEE Int. Conf. Big Knowl. (ICBK),
+Aug. 2017, pp. 192–197.
+[10] J. Yang, X. Guo, N. An, A. Wang, and K. Yu, “Streaming feature-based
+causal structure learning algorithm with symmetrical uncertainty,” Inf.
+Sci., vol. 467, pp. 708–724, Oct. 2018.
+[11] J. Yang, G. Fan, A. Shen, and A. Wang, “Causal structure learning of
+nonlinear additive noise model based on streaming feature,” in Proc. Int.
+Conf. Data Mining Workshops (ICDMW), Dec. 2021, pp. 490–499.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+10706
+
+IEEE TRANSACTIONS ON NEURAL NETWORKS AND LEARNING SYSTEMS, VOL. 36, NO. 6, JUNE 2025
+
+[12] J. Yang, L. Jiang, A. Shen, and A. Wang, “Online streaming features
+causal discovery algorithm based on partial rank correlation,” IEEE
+Trans. Artif. Intell., vol. 4, no. 1, pp. 197–208, Feb. 2023.
+[13] S. Shimizu et al., “DirectLiNGAM: A direct method for learning a linear
+non-Gaussian structural equation model,” J. Mach. Learn. Res., vol. 12,
+pp. 1225–1248, Apr. 2011.
+[14] P. O. Hoyer, S. Shimizu, A. J. Kerminen, and M. Palviainen, “Estimation
+of causal effects using linear non-Gaussian causal models with hidden
+variables,” Int. J. Approx. Reasoning, vol. 49, no. 2, pp. 362–378,
+Oct. 2008.
+[15] S. Shimizu, P. O. Hoyer, A. Hyvärinen, and A. J. Kerminen, “A linear
+non-Gaussian acyclic model for causal discovery,” J. Mach. Learn. Res.,
+vol. 7, pp. 2003–2030, Oct. 2006.
+[16] J. Liang, J. Wang, G. Yu, W. Guo, C. Domeniconi, and M. Guo,
+“Directed acyclic graph learning on attributed heterogeneous network,”
+in IEEE Trans. Knowl. Data Eng., vol. 35, no. 10, pp. 10845–10856,
+Oct. 2023.
+[17] Z. Fang, S. Zhu, J. Zhang, Y. Liu, Z. Chen, and Y. He, “On lowrank directed acyclic graphs and causal structure learning,” IEEE Trans.
+Neural Netw. Learn. Syst., vol. 35, no. 4, pp. 4924–4937, Apr. 2024.
+[18] P. Spirtes, C. N. Glymour, and R. Scheines, Causation, Prediction, and
+Search. Cambridge, MA, USA: MIT Press, 2000.
+[19] T. Richardson, “A discovery algorithm for directed cyclic graphs,” in
+Proc. 12th Conf. Uncertainty Artif. Intell., 1996, pp. 451–461.
+[20] J. Pellet and A. Elisseeff, “Finding latent causes in causal networks: An
+efficient approach based on Markov blankets,” in Proc. Adv. Neural Inf.
+Process. Syst., vol. 21, 2008, pp. 10119–10130.
+[21] S. Akbari, E. Mokhtarian, A. Ghassami, and N. Kiyavash, “Recursive causal structure learning in the presence of latent variables and
+selection bias,” in Proc. Annu. Conf. Neural Inf. Process. Syst., 2021,
+pp. 10119–10130.
+[22] S. Triantafillou and I. Tsamardinos, “Score-based vs constraintbased causal learning in the presence of confounders,” in
+Proc. 32nd Conf. Uncertainty Artif. Intell.–Workshops, 2016,
+pp. 59–67.
+[23] K. Tsirlis, V. Lagani, S. Triantafillou, and I. Tsamardinos, “On
+scoring maximal ancestral graphs with the max–min Hill climbing algorithm,” Int. J. Approx. Reasoning, vol. 102, pp. 74–85,
+Nov. 2018.
+[24] A. Bellot and M. van der Schaar, “Linear deconfounded score method:
+Scoring DAGs with dense unobserved confounding,” IEEE Trans. Neural
+Netw. Learn. Syst., vol. 35, no. 4, pp. 4948–4962, Apr. 2024.
+[25] T. Tashiro, S. Shimizu, A. Hyvärinen, and T. Washio, “ParceLiNGAM:
+A causal ordering method robust against latent confounders,” Neural
+Comput., vol. 26, no. 1, pp. 57–83, Jan. 2014.
+[26] W. Chen, R. Cai, K. Zhang, and Z. Hao, “Causal discovery in linear
+non-Gaussian acyclic model with multiple latent confounders,” IEEE
+Trans. Neural Netw. Learn. Syst., vol. 33, no. 7, pp. 2816–2827,
+Jul. 2022.
+[27] S. Salehkaleybar, A. Ghassami, N. Kiyavash, and K. Zhang, “Learning
+linear non-Gaussian causal models in the presence of latent variables,”
+J. Mach. Learn. Res., vol. 21, no. 39, pp. 1–24, 2020.
+[28] D. You et al., “Continuous causal structure learning from incremental instances and feature spaces,” Inf. Fusion, vol. 101, Jan. 2024,
+Art. no. 101975.
+[29] A. Gretton, R. Herbrich, A. Smola, O. Bousquet, and B. Schölkopf,
+“Kernel methods for measuring Independence,” J. Mach. Learn. Res.,
+vol. 6, pp. 2075–2129, Dec. 2005.
+[30] Q. V. Le, A. Karpenko, J. Ngiam, and A. Y. Ng, “ICA with reconstruction cost for efficient overcomplete feature learning,” in Proc. 24th Int.
+Conf. Neural Inf. Process. Syst., vol. 24, 2011, pp. 1017–1025.
+[31] A. Hyvärinen, K. Zhang, S. Shimizu, and P. O. Hoyer, “Estimation of a structural vector autoregression model using nonGaussianity,” J. Mach. Learn. Res., vol. 11, no. 5, pp. 1709–1731,
+2010.
+
+Chenglin Zhang (Graduate Student Member, IEEE)
+received the B.S. and M.S. degrees in computer science and technology from Chongqing University of
+Posts and Telecommunications, Chongqing, China,
+in 2015 and 2018, respectively, where he is currently
+pursuing the Ph.D. degree with a focus on research
+in causal learning and granular computing.
+
+Hong Yu (Member, IEEE) received the B.E. degree
+in physics from Nanchang Hangkong University,
+Nanchang, China, in 1994, the M.S. degree in signal
+and information processing from Chongqing University of Posts and Telecommunications, Chongqing,
+China, in 1997, and the Ph.D. degree in computer
+software and theory from Chongqing University,
+Chongqing, in 2003.
+Since 2013, she has been a Full Professor at
+Chongqing University of Posts and Telecommunications. From 2007 to 2008, she was a Visiting Scholar
+at the University of Regina, Regina, SK, Canada. She is the author of three
+books and more than 100 articles. Her research interests include rough sets,
+industrial big data, data mining, knowledge discovery, granular computing,
+three-way clustering, and machine learning.
+Dr. Yu was one of the first prize winners of a Chongqing Natural Science
+and Technology Award in 2019. Her article was selected as one of the Top
+Articles in the Outstanding S&T Journal of China.
+Guoyin Wang (Senior Member, IEEE) received
+the B.E. degree in computer software, the M.S.
+degree in computer software, and the Ph.D. degree in
+computer organization and architecture from Xi’an
+Jiaotong University, Xi’an, China, in 1992, 1994,
+and 1996, respectively.
+He was at the University of North Texas, Denton,
+TX, USA, and the University of Regina, Regina, SK,
+Canada, as a Visiting Scholar from 1998 to 1999.
+Since 1996, he has been at Chongqing University of
+Posts and Telecommunications, Chongqing, China,
+where he is currently a Professor, the Director of Chongqing Key Laboratory
+of Computational Intelligence, and the Vice-President of the University. He is
+the author of more than ten books and more than 300 articles. His research
+interests include rough sets, granular computing, knowledge technology, data
+mining, neural networks, and cognitive computing.
+Dr. Wang was the President of the International Rough Set Society (IRSS)
+from 2014 to 2017. He is the Vice-President of Chinese Association for
+Artificial Intelligence (CAAI) and a Council Member of China Computer
+Federation (CCF).
+Yongfang Xie (Senior Member, IEEE) received
+the B.S., M.S., and Ph.D. degrees in control science and engineering from Central South University,
+Changsha, China, in 1993, 1996, and 1999, respectively.
+From 1999 to 2003, he was with Tokyo International Information Science Research Institute,
+Tokyo, Japan, and a Visiting Scholar with the PToPA
+Research Institute, Tokyo. He is currently a Full Professor with the School of Information Science and
+Engineering, Central South University. His current
+research interests include modeling, optimization, and control of complicated
+industrial processes, distributed robust control, and fault diagnoses.
+
+Authorized licensed use limited to: Indian Institute of Technology Patna. Downloaded on June 14,2026 at 11:53:35 UTC from IEEE Xplore. Restrictions apply.
+
+

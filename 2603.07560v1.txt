@@ -1,0 +1,655 @@
+Learning the APT Kill Chain: Temporal Reasoning over
+Provenance Data for Attack Stage Estimation
+Trung V. Phan and Thomas Bauschert
+
+arXiv:2603.07560v1 [cs.CR] 8 Mar 2026
+
+Chair of Communication Networks, Technische Universität Chemnitz, 09126 Chemnitz, Germany
+Email: trung.phan-van@etit.tu-chemnitz.de, thomas.bauschert@etit.tu-chemnitz.de
+This paper has been accepted for publication in IEEE ICC 2026.
+
+Abstract—Advanced Persistent Threats (APTs) evolve through
+multiple stages, each exhibiting distinct temporal and structural
+behaviors. Accurate stage estimation is critical for enabling
+adaptive cyber defense. This paper presents StageFinder, a
+temporal-graph learning framework for multi-stage attack progression inference from fused host and network provenance
+data. Provenance graphs are encoded using a graph neural
+network to capture structural dependencies among processes,
+files, and connections, while a long short-term memory (LSTM)
+model learns temporal dynamics to estimate stage probabilities
+aligned with the MITRE ATT&CK framework. The model is
+pretrained on the DARPA OpTC dataset and fine-tuned on
+labeled DARPA Transparent Computing data. Experimental
+results demonstrate that StageFinder achieves a macro F1-score
+of 0.96 and reduces prediction volatility by 31% compared to
+state-of-the-art baselines (Cyberian, NetGuardian). These results
+highlight the effectiveness of fused provenance–temporal learning
+for accurate and stable APT stage inference.
+Index Terms—Advanced Persistent Threats (APTs), MultiStage Attack Classification, Provenance Graph, DARPA Datasets.
+Fig. 1. An example of an APT attack towards an enterprise network.
+
+I. I NTRODUCTION
+Advanced Persistent Threats (APTs) [1] have emerged as
+one of the most formidable challenges in modern cybersecurity, targeting enterprise, governmental, and critical infrastructure networks. Unlike opportunistic or commodity malware,
+APTs are characterized by stealth, long dwell times, and multistage progressions designed to achieve long-term objectives
+such as data exfiltration, espionage, or operational disruption.
+As illustrated in Figure 1 (inspired by the MITRE ATT&CK
+Enterprise matrix [2]), a typical APT campaign begins with
+Reconnaissance, followed by Initial Compromise, Privilege
+Escalation, Lateral Movement, Command & Control, and
+ultimately Exfiltration. Each stage leaves only subtle traces,
+often interleaved with benign activities, which makes accurate
+detection and interpretation particularly challenging [1].
+Traditional signature-based intrusion detection and prevention systems (IDS/IPS) are effective against known exploits
+but fail to recognize novel or evolving Tactics, Techniques,
+and Procedures (TTPs) [3]. Anomaly-based methods expand
+coverage to unseen threats but frequently suffer from high
+false positive rates and lack contextual awareness of multistep attack progressions [4]. Furthermore, the low-and-slow
+behavior of APTs distributes weak indicators sparsely across
+logs and hosts, making causal inference and event correlation
+difficult using conventional detection pipelines [5].
+
+Each APT stage manifests a distinct behavioral signature. During Reconnaissance, adversaries perform network
+scanning, service enumeration, and probing to map potential
+entry points. The Initial Compromise phase often employs
+spear-phishing or malicious document delivery to gain initial
+access, while Privilege Escalation involves exploiting local
+vulnerabilities to obtain elevated privileges. Lateral Movement relies on credential reuse and remote code execution
+to spread laterally, and finally, Exfiltration involves covert
+data transfer or command-and-control (C2) communication
+to external servers. Detecting and classifying these evolving
+phases—a process known as APT stage estimation—is crucial
+for enabling adaptive, context-aware defenses. A stage-aware
+system can, for instance, apply selective monitoring during
+reconnaissance and escalate to aggressive containment during
+lateral movement, thereby improving response precision and
+reducing both false alarms and missed detections [1].
+This paper proposes StageFinder, a temporal-graph learning framework for multi-stage attack progression inference.
+StageFinder continuously collects host-level system logs and
+transforms them into provenance graphs that capture causal
+and temporal dependencies among system entities such as
+processes, files, users, and sockets. To incorporate broader situational context, an early fusion mechanism integrates network-
+
+layer alerts—for example, those produced by IDS or firewall
+systems—directly into the provenance graph. Each alert is
+modeled as a first-class node linked to the relevant host
+entities, preserving semantic relationships between network
+anomalies and local activities. The resulting fused provenance
+graph expresses both intra-host and inter-network dependencies in a unified causal space.
+A graph neural network (GNN) encoder extracts lowdimensional embeddings from these fused graphs to represent structural and contextual patterns. These embeddings are
+then processed by a long short-term memory (LSTM) model
+that captures temporal dynamics and estimates the attacker’s
+probabilistic stage in the kill chain. Evaluations conducted
+on the DARPA Transparent Computing (TC) [6] and Operationally Transparent Cyber (OpTC) [7] datasets demonstrate
+that StageFinder achieves a macro F1-score of 0.96 and
+reduces prediction volatility by 31% compared with state-ofthe-art APT stage classification methods such as Cyberian [8]
+and NetGuardian [9]. These results confirm the effectiveness
+of combining provenance-based graph modeling and temporal
+reasoning for accurate, interpretable, and stable multi-stage
+intrusion understanding.
+II. R ELATED W ORK
+Research on Advanced Persistent Threat (APT) detection increasingly focuses on identifying and classifying attack stages,
+which reflect the temporal and structural evolution of an
+intrusion. Early work treated stage inference as a probabilistic
+state-transition problem, employing Hidden Markov Models
+(HMMs) to infer hidden attacker states from sequences of
+system logs [10]. Although the model captures basic temporal dependencies, it relies on handcrafted features and fixed
+transition probabilities, limiting its adaptability to new or
+polymorphic attack behaviors.
+With the availability of richer host-level telemetry, deep
+temporal models have become dominant. For example, Cyberian [8] applied LSTMs to the DARPA Transparent Computing
+(TC) dataset for multi-stage intrusion classification, outperforming rule-based systems in precision and recall. However, purely sequential models fail to encode causal relations
+among entities—such as processes, files, and sockets—that are
+essential for distinguishing between subtle transitions (e.g.,
+lateral movement versus command-and-control). Meanwhile,
+NetGuardian [9] addressed this issue through a stage-specific
+ensemble in which dedicated classifiers target individual
+phases of the attack lifecycle. This modular structure improves
+interpretability but requires manual feature engineering and
+cannot generalize to unseen attack chains. To enhance temporal reasoning, Do Xuan et al. [11] combined BiLSTMs with
+attention mechanisms to highlight critical subsequences in
+network traffic. Despite its improved accuracy, these methods
+still treat host and network logs as independent event streams,
+overlooking causal dependencies across entities and systems.
+To capture such relationships, provenance- and graph-based
+models have gained traction. System provenance provides a
+
+structured abstraction of entity interactions through eventdriven data flows [5], offering the context needed to reconstruct attack paths and understand stage transitions. Bahar et
+al. [12] proposed a spatio–temporal graph neural network that
+learns topological and temporal correlations for APT detection,
+while Wang et al. [13] developed a dynamic graph embedding
+approach that updates node representations as attacks evolve.
+Complementary runtime frameworks, such as Prographer [14],
+leverage provenance graphs for anomaly detection through
+graph compression and incremental analysis, enabling scalable
+monitoring of long-running systems. Zimba et al. [15] extended this direction using semi-supervised complex network
+modeling to infer APT phase transitions under limited labeled
+data. These studies confirm that causal graph representations
+and temporal reasoning jointly improve detection fidelity and
+temporal stability in APT stage classification.
+Summary and Motivation: Existing APT stage inference
+techniques exhibit complementary strengths yet face persistent limitations. Sequential models (e.g., Cyberian) effectively
+capture temporal evolution but ignore structural causality;
+stage-specific frameworks (e.g., NetGuardian) improve interpretability but lack unified temporal coherence; and graphbased methods excel at structural reasoning but often overlook
+multi-modal temporal dynamics. StageFinder addresses these
+challenges through a unified temporal-graph learning approach
+that fuses host and network provenance data. By combining
+GNN-based structural encoding with LSTM-based temporal
+modeling, StageFinder achieves accurate, context-aware, and
+temporally stable estimation of APT progression across the
+enterprise environment.
+III. D ESIGN OF THE S TAGE F INDER F RAMEWORK
+This section details the design of the proposed StageFinder
+framework, which operates as a sequential processing pipeline
+within an enterprise network environment. As shown in Figure 2, the system ingests multi-source telemetry, constructs
+fused provenance graphs, encodes them via a GNN, and
+performs temporal stage estimation through an LSTM-based
+model, followed by interpretable attack stage mapping.
+A. Network Environment
+The pipeline begins with data collection in a controlled enterprise environment logically divided into four zones—local
+area network (LAN), demilitarized zone (DMZ), server zone,
+and management zone. The LAN contains employee workstations and internal services that often serve as entry points for
+phishing or drive-by compromise. The DMZ hosts externally
+accessible services (web, mail, VPN) and acts as a buffer
+between external and internal networks. The server zone stores
+critical business assets such as database and authentication
+servers, which are common APT targets during later stages.
+The management zone contains centralized monitoring and
+orchestration components, where the StageFinder framework
+is deployed to collect telemetry from all other zones while
+remaining isolated from external access. Network traffic is
+filtered by perimeter firewalls and analyzed by IDS/IPS sensors
+
+Fig. 2. Data and control flow of the StageFinder framework. Host logs and network alerts are fused into a provenance graph, encoded by a GNN, and
+analyzed by an LSTM-based Stage Estimator, with the Attack Stage Mapping producing discrete APT stages.
+
+TABLE I
+E XAMPLE CAPTURED HOST LOG EVENTS CAPTURED BY S YSMON .
+Sysmon Event
+ProcessCreate
+FileCreate
+ProcessCreate
+
+Description
+powershell.exe launches wget.exe
+wget.exe creates file payload.exe
+payload.exe starts execution
+
+(e.g., Zeek), ensuring that both host-level and network-level
+data are available for subsequent fusion.
+B. Early Fusion of Host and Network Provenance Data
+Next, StageFinder performs early fusion to unify host and
+network data into provenance graphs. APTs typically manifest
+through coordinated host and network behaviors—where host
+telemetry (e.g., process creation, file I/O) alone cannot reveal
+external C2 or lateral movement, and network alerts lack
+causal attribution to specific processes. To bridge this gap, the
+fusion mechanism (highlighted in blue in Figure 2) integrates
+logs and alerts directly during provenance graph construction.
+Each process node (e.g., wget.exe, powershell.exe) is linked to
+IDS or firewall alert nodes when causal evidence of related
+activity is detected. Each alert node includes metadata (e.g.,
+signature, severity) and is connected via time-ordered edges,
+preserving causality.
+This fine-grained integration provides three major benefits:
+(i) Causal completeness—each fused subgraph captures both
+intra-host dependencies (process–file–registry) and inter-host
+communications, enabling learning models to reason over
+full attack chains; (ii) Contextual consistency—fusion occurs
+prior to feature extraction, allowing GNN encoders to learn
+coherent representations across modalities; and (iii) Enhanced
+stage awareness—temporal alignment of host and network
+evidence improves the discrimination of key APT stages such
+as initial compromise, lateral movement, and data exfiltration.
+A concrete example of the proposed early-fusion mechanism
+is provided in the following section.
+
+Fig. 3. An example of a provenance graph construction with the early fusion.
+
+(processes, files, sockets, IP addresses, and alert events), and
+edges 𝐸 𝑡 represent causal or temporal dependencies such
+as read, write, spawn, connect, and triggered by. Host and
+network data are integrated through the proposed early-fusion
+strategy, which connects provenance and alert information
+directly during graph construction to preserve causal and
+temporal consistency.
+Example: Consider a scenario where a suspicious process
+on a workstation (10.1.1.45) downloads and executes a file
+from a remote server. As summarized in Table I, Sysmon logs
+record process creation and file operations, forming intra-host
+relations such as powershell.exe spawning wget.exe,
+which writes and executes payload.exe. Concurrently,
+a Zeek IDS generates an alert (ET TROJAN Possible
+Malicious EXE Download) between the local host and
+external IP 203.0.113.10. The builder adds corresponding
+alert and IP nodes and links them to the responsible process
+via directed edges (triggered by, connect). The resulting fused
+subgraph thus unifies host-level causality with network evidence, enabling reasoning over complete attack chains rather
+than isolated events, as shown in Figure 3.
+D. Graph Encoder
+
+C. Provenance Graph Builder
+The provenance graph builder then parses and correlates
+raw host logs and network alerts into a unified causal graph
+representation. For each time window 𝑡, it constructs a fused
+provenance graph 𝐺 𝑡 = (𝑉𝑡 , 𝐸 𝑡 ), where nodes 𝑉𝑡 denote entities
+
+After graph construction, StageFinder transforms each fused
+graph into a low-dimensional embedding through the graph
+encoder. The fused provenance graph is defined as 𝐺 𝑡 =
+(𝑉𝑡 , 𝐸 𝑡 , 𝑋𝑡 , 𝑍𝑡 ), where 𝑉𝑡 and 𝐸 𝑡 denote the sets of nodes
+(processes, files, sockets, users, alerts) and directed edges,
+
+respectively. Each node 𝑣 𝑖 ∈ 𝑉𝑡 and edge 𝑒 𝑖 𝑗 ∈ 𝐸 𝑡 is associated with feature vectors x𝑖 ∈ R𝑑𝑥 and z𝑖 𝑗 ∈ R𝑑𝑒 , forming
+𝑋𝑡 = {x𝑖 } and 𝑍𝑡 = {z𝑖 𝑗 }. The goal is to encode 𝐺 𝑡 into a
+low-dimensional graph embedding 𝑔𝑡 ∈ R𝑑𝑔 .
+1) Node Feature Initialization: Each node 𝑣 𝑖 is initialized
+with a feature vector x𝑖 ∈ R𝑑𝑥 encoding structural, semantic,
+and temporal attributes. We distinguish two primary node
+categories: host-log entities and network-alert entities.
+a) Host Log Entities: For system-derived nodes (process,
+file,
+socket, user, host), features are defined as x𝑖(host) =
+
+𝜙type ∥ 𝜙cmd ∥ 𝜙user ∥ 𝜙time ∥ 𝜙stat , where 𝜙type is a onehot entity-type encoding, 𝜙cmd is a TF–IDF embedding of
+command strings or file names, 𝜙user encodes user or privilege
+context, 𝜙time is a timestamp embedding, and 𝜙stat contains
+statistical indicators such as node degree or event counts.
+b) Network Alert Entities: For alert nodes derived from
+IDS or firewall notifications, features are represented as
+x𝑖(alert) = 𝜙sig ∥ 𝜙sev ∥ 𝜙proto ∥ 𝜙net ∥ 𝜙time , where 𝜙sig encodes
+alert signature or textual message, 𝜙sev is a normalized severity
+score, 𝜙proto specifies protocol and flow direction, 𝜙net encodes
+IP/port or subnet context, and 𝜙time encodes relative time.
+2) Edge Feature Initialization: Each directed edge 𝑒 𝑖 𝑗 =
+(𝑣 𝑖 , 𝑣 𝑗 , 𝜏𝑖 𝑗 ) ∈ 𝐸 𝑡 encodes a causal or communicative relation
+between two entities. Edges are represented by feature vectors
+z𝑖 𝑗 ∈ R𝑑𝑒 to capture relation-specific semantics.
+a) Host Log Edges: Edges derived from system-level
+
+= 𝜓type 𝜓freq 𝜓size 𝜓time ,
+events are initialized as z𝑖(host)
+𝑗
+where 𝜓type encodes the event type (read, write, exec, send,
+recv, etc.), 𝜓freq is the normalized interaction frequency, 𝜓size
+denotes log-normalized byte volume, and 𝜓time is the temporal
+offset within the window.
+b) Network
+Alert
+Edges:
+Alert-related
+edges
+=
+link alerts to affected hosts or sockets: z𝑖(alert)
+𝑗
+
+
+𝜓atype ∥ 𝜓sev ∥ 𝜓proto ∥ 𝜓time , where 𝜓atype encodes the
+alert category, 𝜓sev captures alert severity, 𝜓proto specifies
+protocol context, and 𝜓time encodes temporal recency.
+All continuous attributes are standardized using z-score
+normalization and projected into a shared latent space: x̃𝑖 =
+𝑊 𝑥 x𝑖 + 𝑏 𝑥 ,
+z̃𝑖 𝑗 = 𝑊𝑧 z𝑖 𝑗 + 𝑏 𝑧 , where 𝑊 𝑥 ∈ R𝑑ℎ ×𝑑𝑥 and
+𝑑
+×𝑑
+𝑊𝑧 ∈ R ℎ 𝑒 are learnable matrices.
+3) Graph Encoding: The relational and temporal dependencies in 𝐺 𝑡 are aggregated using a multi-layer GNN through
+message passing:
+© ∑︁ ∑︁
+ )
+ª
+1
+𝑊 𝜏(ℓ ) h (ℓ
+∥ z̃𝑖 𝑗 ®® ,
+h𝑖(ℓ+1) = 𝜎 ­­
+𝑗
+𝑐
+𝜏 ∈T 𝑗 ∈Γ ( 𝜏) (𝑖) 𝑖, 𝜏
+𝑡
+¬
+«
+
+(1)
+
+where T is the set of relation types, Γ𝑡( 𝜏 ) (𝑖) denotes neighbors
+of node 𝑖 under relation 𝜏, 𝑐 𝑖, 𝜏 is a normalization factor, and
+𝜎(·) is a nonlinear activation. After 𝐿 layers, a permutationinvariant attention readout yields the final graph embedding:
+
+
+𝑔𝑡 = READOUT {h𝑖( 𝐿) | 𝑣 𝑖 ∈ 𝑉𝑡 } , 𝑔𝑡 ∈ R𝑑𝑔 .
+(2)
+The resulting 𝑔𝑡 compactly encodes both intra-host and
+inter-host dependencies, serving as the temporal input sequence to the LSTM-based Stage Estimator.
+
+TABLE II
+APT STAGES DERIVED FROM MITRE ATT&CK FRAMEWORK [2].
+Stage ID
+k=1
+k=2
+k=3
+k=4
+k=5
+k=6
+
+Stage Name
+Reconnaissance
+Initial Compromise
+Privilege Escalation
+Lateral Movement
+Command and Control
+Exfiltration
+
+Representative Techniques
+Network scanning
+PowerShell payloads
+Registry autoruns
+PsExec, WMI
+Beaconing
+Data compression
+
+E. LSTM-Based Stage Estimator
+Next, the Stage Estimator identifies the current phase of
+an APT campaign by analyzing temporal patterns within
+fused provenance graph embeddings. Guided by the MITRE
+ATT&CK Enterprise framework [2], the attack lifecycle is abstracted into six operational stages, as summarized in Table II.
+Each stage reflects distinctive behavioral and structural signatures, facilitating interpretable and data-efficient classification.
+A benign class (𝑘 = 0) is also defined to represent normal
+system operation, completing the stage taxonomy.
+Because APTs evolve sequentially over time, we employ a
+Long Short-Term Memory (LSTM) network to model temporal dependencies in the sequence of graph embeddings
+{𝑔1 , 𝑔2 , . . . , 𝑔𝑡 }, where each 𝑔𝑡 ∈ R𝑑𝑔 encodes a fused provenance graph snapshot at time 𝑡. At each step, the LSTM
+updates its hidden and cell states as
+(ℎ𝑡 , 𝑐 𝑡 ) = 𝑓LSTM (𝑔𝑡 , ℎ𝑡 −1 , 𝑐 𝑡 −1 ),
+
+(3)
+
+where ℎ𝑡 captures both short- and long-term context across
+time windows, and 𝑐 𝑡 represents the internal memory.
+The output hidden state ℎ𝑡 is passed through a softmax
+classifier to estimate the probability distribution over stages:
+
+𝑝 𝑡 = softmax 𝑊stage ℎ𝑡 + 𝐵stage ,
+(4)
+where 𝑝 𝑡(𝑘 ) denotes the likelihood of stage 𝑘, 𝑊stage and 𝐵stage
+are learnable parameters.
+The model thus provides a continuous estimation of the
+attacker’s current phase based on historical system-network
+behaviors encoded in the fused provenance graphs.
+F. Attack Stage Mapping
+Finally, the Attack Stage Mapping module converts the
+Stage Estimator’s probabilistic outputs into interpretable
+attack-phase insights. Given the stage probability vector 𝑝 𝑡 ,
+it determines the most likely phase 𝑘ˆ 𝑡 = arg max 𝑘 𝑝 𝑡(𝑘 ) and
+tracks its temporal evolution to reveal transitions across the
+APT lifecycle. This time-aligned mapping aids analysts in understanding attack progression and can export stage estimates
+as structured alerts to external defense components, such as
+response orchestration or threat-hunting systems, thus bridging
+stage inference with actionable defense.
+IV. P ERFORMANCE E VALUATION
+A. Datasets
+The StageFinder framework is evaluated using two complementary datasets from the DARPA cyber defense programs,
+
+which together provide both labeled and large-scale unlabeled
+telemetry for APT stage inference.
+a) DARPA Transparent Computing (TC): The TC dataset
+[6] contains multi-week red/blue-team engagements on instrumented enterprise networks, recording fine-grained system
+provenance from Linux, FreeBSD, and Windows hosts. Subsets such as CADETS, THEIA, TRACE, and FiveDirections
+capture process creation, file I/O, IPC, and network events,
+totaling 200–600 million records across 10–50 hosts per
+engagement. Each campaign includes ground-truth manifests
+aligned with MITRE ATT&CK stages, enabling supervised
+labeling of provenance graph snapshots for training and evaluation of the Stage Estimator.
+b) DARPA Operationally Transparent Cyber (OpTC):
+The OpTC dataset [7] extends TC by integrating large-scale
+host and network telemetry across hundreds of systems, containing roughly 8.7 billion host events and 0.53 billion Zeek
+flow logs from multi-day red-team operations. Although OpTC
+lacks explicit APT stage annotations, it provides correlated,
+high-volume sequences of host–network interactions suitable
+for self-supervised pretraining of the Stage Estimator.
+B. LSTM-based Stage Estimator Training Strategy
+The Stage Estimator is trained in two sequential phases
+to exploit both unlabeled and labeled telemetry. First,
+self-supervised pretraining is performed on the large-scale
+DARPA OpTC dataset to learn generic temporal dependencies
+between host and network activities. Second, the pretrained
+model is fine-tuned on the DARPA Transparent Computing
+(TC) dataset for stage-specific discrimination using groundtruth red-team annotations.
+a) Self-Supervised Pretraining on OpTC: For each
+300 s window, a fused provenance graph 𝐺 𝑡 is encoded
+by the GNN into a vector 𝑔𝑡 = 𝑓GNN (𝐺 𝑡 ) ∈ R𝑑𝑔 ,
+forming sequences {𝑔𝑡 −𝐿+1 , . . . , 𝑔𝑡 } (𝐿=20). A twolayer LSTM (𝐻=128, dropout 0.3) is trained Íwith two
+objectives: next-step prediction Lpred = 𝑇 1−1 𝑡 ∥𝑔𝑡+1 −
+𝑔ˆ 𝑡+1 ∥ 22 ,
+𝑔ˆ 𝑡+1 = 𝑊𝑜 ℎ𝑡 + 𝑏 𝑜 , and a temporal contrastive
+Í
+𝑡 ,𝑔𝑡+1 )/𝜏 )
+loss Lctr = −𝑇 1−1 𝑡 log Í exp(sim(ℎ
+, with 𝜏=0.2 and
+−
+𝑔 − ∈N exp(sim(ℎ𝑡 ,𝑔 )/𝜏 )
+|N|=256. The joint objective is Lssl = 𝜆pred Lpred + 𝜆ctr Lctr .
+Training uses Adam (lr=10−3 , weight decay 10−5 , batch
+size 64, 20 epochs, gradient clipping ∥∇∥ 2 ≤ 5).
+b) Supervised Fine-Tuning on TC: The pretrained LSTM
+is adapted to labeled TC engagements segmented into 300 s
+windows with APT stage labels 𝑦 𝑡 ∈ {0, . . . , 6}. A softmax
+head predicts stage probabilities: 𝑝 𝑡 = softmax(𝑊stage ℎ𝑡 +
+𝐵stage ), 𝑝 𝑡(𝑘 ) = 𝑃(stage = 𝑘 | 𝑔1:𝑡 ), optimized using weighted
+Í
+cross-entropy: Lsup = − 𝑇1 𝑡 ,𝑘 𝑤 𝑘 𝑦 𝑡(𝑘 ) log( 𝑝 𝑡(𝑘 ) +𝜖), where 𝑤 𝑘
+compensates class imbalance and 𝜖=10−8 . Fine-tuning proceeds in two stages: (i) discriminative training (frozen lower
+LSTM, 10 epochs, lr=10−4 ) and (ii) end-to-end optimization
+(20 epochs, lr=5×10−5 ). Training uses dropout 0.3, early
+stopping on validation F1, and temporal curriculum learning
+(sequence length 10→30). All experiments are implemented
+in PyTorch 2.1 with DGL on an NVIDIA RTX 3060 GPU
+(32 GB), completing in ∼1.5 hours.
+
+TABLE III
+S TAGE F INDER PERFORMANCE ON DARPA TC (E NGAGEMENT 5).
+
+Metric
+Precision
+Recall
+F1-Score
+TFR↓
+Accuracy
+AUPR
+
+Cyberian
+0.89 ± 0.02
+0.90 ± 0.03
+0.90 ± 0.02
+0.182 ± 0.015
+0.90 ± 0.03
+0.91 ± 0.02
+
+NetGuardian
+0.92 ± 0.02
+0.91 ± 0.02
+0.92 ± 0.02
+0.160 ± 0.012
+0.92 ± 0.02
+0.94 ± 0.02
+
+StageFinder
+0.96 ± 0.01
+0.96 ± 0.01
+0.96 ± 0.01
+0.125 ± 0.010
+0.96 ± 0.01
+0.97 ± 0.01
+
+C. Experimental Setup and Baseline Models
+The Stage Estimator in the StageFinder framework was
+pretrained on the DARPA OpTC dataset to learn general host–
+network dynamics and fine-tuned on the labeled DARPA TC
+(Engagement 5) dataset. Evaluation was conducted on unseen
+samples from other TC engagements to assess generalization.
+Logs were segmented into 300 s windows, and a 3-layer GNN
+produced graph embeddings 𝑔𝑡 for the LSTM input.
+Performance was measured using Precision, Recall, F1score, and Accuracy to evaluate detection quality, while AUPR
+(area under the precision–recall curve) quantified robustness
+to class imbalance. Temporal stability was assessed via Temporal Flip Rate (TFR)—the proportion of adjacent windows
+with differing stage predictions, where lower values indicate
+smoother transitions. All results are reported as mean ± standard deviation across five temporal folds.
+Baseline Methods: We compare the StageFinder framework
+with two representative APT-stage classifiers: (i) Cyberian [8]
+employs an LSTM to model temporal dependencies in hostlevel events. For fair comparison, we reimplemented it under
+the same architecture but without fused network alerts or
+cross-dataset pretraining, training solely on TC dataset. (ii)
+NetGuardian [9] uses stage-specific classifiers—e.g., SVMs
+for Initial Compromise and anomaly detectors for Lateral
+Movement and C2—trained on TC-derived features. We reproduced this heuristic pipeline to obtain both per-stage and
+overall F1-scores.
+D. Result Analysis
+Table III summarizes the comparative performance
+of Cyberian, NetGuardian, and the StageFinder on the
+DARPA TC (E5) dataset. The StageFinder consistently
+outperforms both baselines across all metrics, confirming the
+benefit of combining fused provenance graph representations
+with temporal modeling and cross-dataset pretraining.
+The StageFinder achieves a macro F1-score of 0.96 ±
+0.01, improving upon Cyberian (0.90±0.02) and NetGuardian
+(0.92±0.02) by roughly 6% and 4%, respectively. Both Precision and Recall reach 0.96, reflecting enhanced APT detection
+and fewer false positives. Overall Accuracy and AUPR rise
+to 0.96±0.01 and 0.97±0.01, while the Temporal Flip Rate
+(TFR) drops from 0.182 (Cyberian) and 0.160 (NetGuardian)
+to 0.125, indicating a 31% reduction in prediction volatility.
+This smoother evolution of predicted stages suggests that the
+LSTM effectively models long-term temporal dependencies
+within the fused graph sequences.
+
+TABLE IV
+P ER - STAGE F1- SCORES ON DARPA TC (E NGAGEMENT 5).
+
+𝑘
+0
+1
+2
+3
+4
+5
+6
+Macro Avg.
+
+Stage
+Normal
+Recon.
+Init. Comp.
+Priv. Esc.
+Lat. Move.
+C2
+Exfil.
+–
+
+Cyberian NetGuardian StageFinder
+0.93±0.02 0.95±0.02
+0.97±0.01
+0.88±0.03 0.91±0.03
+0.94±0.02
+0.89±0.03 0.92±0.02
+0.96±0.01
+0.87±0.04 0.90±0.03
+0.95±0.02
+0.86±0.05 0.91±0.04
+0.96±0.01
+0.88±0.04 0.93±0.03
+0.97±0.01
+0.85±0.05 0.90±0.04
+0.95±0.02
+0.88±0.03 0.92±0.03
+0.96±0.01
+
+V. C ONCLUSION
+This work presented StageFinder, a temporal-graph learning
+framework for accurate inference of APT attack stages from
+fused host and network provenance data. By integrating early
+fusion at the graph-construction stage with a GNN-based encoder and an LSTM temporal estimator, StageFinder captures
+both structural causality and temporal evolution across multihost environments. Evaluations on DARPA TC and OpTC
+datasets demonstrate significant improvements in detection accuracy, temporal stability, and stage-level interpretability over
+state-of-the-art baselines. The framework’s modular design
+allows its outputs to be directly consumed by higher-level
+defense systems for automated response. In our future work,
+we will extend the framework toward joint stage estimation
+and adaptive defense policy learning.
+ACKNOWLEDGMENT
+This work has been performed in the framework of the
+SUSTAINET-Advance project, funded by the German BMFTR
+(ID:16KIS2280).
+R EFERENCES
+
+Fig. 4. Temporal attention comparison between Cyberian and StageFinder
+LSTM models.
+
+Per-stage results in Table IV further demonstrate consistent
+gains across all APT phases (𝑘=0–6). In early stages (Reconnaissance and Initial Compromise), F1-scores increase from
+0.88–0.92 (baselines) to 0.94–0.96 with StageFinder, aided
+by early fusion of host and network alerts. For intermediate
+phases (Privilege Escalation, Lateral Movement), scores improve from 0.86–0.91 to 0.95–0.96, reflecting stronger capture of inter-host causal dependencies. During Command-andControl and Exfiltration, the estimator attains 0.97 and 0.95,
+surpassing Cyberian (0.88/0.85) and NetGuardian (0.93/0.90).
+The macro F1-score increases from 0.88 and 0.92 to 0.96,
+corresponding to relative gains of 9% and 4%. These results
+confirm that the proposed framework delivers more accurate
+and temporally stable APT stage estimation across the full
+intrusion lifecycle.
+To examine temporal learning behavior, Figure 4 depicts
+the attention distributions of the LSTM models from Cyberian
+and StageFinder over time. The Cyberian model shows diffuse
+and irregular attention peaks, suggesting limited ability to
+consistently focus on semantically relevant temporal segments
+due to the absence of causal and contextual graph information. In contrast, the StageFinder exhibits concentrated and
+stable attention patterns aligned with mid-to-late time windows
+corresponding to the Command-and-Control and Exfiltration
+stages. These focused distributions indicate enhanced temporal
+coherence and clearer recognition of critical APT transitions,
+confirming the model’s capacity to capture long-range dependencies within fused provenance graph sequences.
+
+[1] Alshamraniand et al., “A survey on advanced persistent threats: Techniques, solutions, challenges, and research opportunities,” IEEE Communications Surveys & Tutorials, vol. 21, no. 2, pp. 1851–1877, 2019.
+[2] The MITRE Corporation, “MITRE ATT&CK: A knowledge base of
+adversary tactics, techniques, and common knowledge,” 2026. [Online].
+Available: https://attack.mitre.org.
+[3] Mutalib et al., “Explainable deep learning approach for advanced
+persistent threats (apts) detection in cybersecurity: A review,” Artificial
+Intelligence Review, vol. 57, no. 11, p. 297, 2024.
+[4] R. A. Bridges et al., “A survey of intrusion detection systems leveraging
+host data,” ACM Comput. Surv., vol. 52, Nov. 2019.
+[5] X. Han et al., “Provenance-based intrusion detection: opportunities and
+challenges,” in 10th USENIX Workshop on the Theory and Practice of
+Provenance (TaPP 2018), 2018.
+[6] DARPA,
+“Darpa
+transparent
+computing
+(tc)
+engagement
+dataset,” 2019.
+[Online]. Available: https://github.com/darpa-i2o/
+Transparent-Computing.
+[7] DARPA, “Operationally Transparent Cyber (OpTC) Dataset,” 2019.
+[Online]. Available: https://github.com/FiveDirections/OpTC-data.
+[8] M. AbuOdeh et al., “A novel ai-based methodology for identifying cyber
+attacks in honey pots,” Proceedings of the AAAI Conference on Artificial
+Intelligence, vol. 35, pp. 15224–15231, May 2021.
+[9] J. Gui et al., “A principled approach for detecting apts in massive
+networks via multi-stage causal analytics,” in IEEE INFOCOM 2025
+- IEEE Conference on Computer Communications, pp. 1–10, 2025.
+[10] W. Ma et al., “Anomaly-based multi-stage attack detection method,”
+PLOS ONE, vol. 19, no. 5, p. e0300821, 2024.
+[11] C. D. Do Xuan et al., “A novel approach for apt attack detection based
+on an intelligent behavior profile and deep graph network,” Scientific
+Reports, vol. 14, 2024.
+[12] A. A. M. Bahar et al., “Continuum: Detecting apt attacks through spatialtemporal graph neural networks,” 2025.
+[13] L. Wang et al., “A dynamic provenance graph-based detector for
+advanced persistent threats,” Expert Systems with Applications, vol. 265,
+p. 125877, 2025.
+[14] F. Yang et al., “PROGRAPHER: An anomaly detection system based
+on provenance graph embedding,” in 32nd USENIX Security Symposium (USENIX Security 23), (Anaheim, CA), pp. 4355–4372, USENIX
+Association, Aug. 2023.
+[15] A. Zimba et al., “Modeling and detection of the multi-stages of advanced
+persistent threats attacks based on semi-supervised learning and complex
+network characteristics,” Future Generation Computer Systems, vol. 108,
+pp. 636–646, 2020.
+
+

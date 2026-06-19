@@ -1,0 +1,44 @@
+\section{Implementation \& Optimizations}
+
+Our framework is implemented in Python using NumPy, Pandas, PyTorch (for the LSTM sequence reasoning), Scikit-Learn (for the Behavioral Pattern Reasoner and Stacked Meta-Learner), Tigramite (for PCMCI causal discovery), and SciPy. 
+
+To achieve real-time throughput on high-velocity enterprise streams, we optimize the pipeline across three key areas:
+\begin{enumerate}
+\item \textbf{NumPy Matrix Indexing}: Pandas \texttt{.iloc} lookups inside the sliding window loop introduced severe latency. We pre-convert all time-series dataframes into 2D NumPy matrices and map column names to integer offsets, eliminating pandas overhead.
+\item \textbf{Fast Binary Search Conformal Lookup}: We replace the sequential list-comprehension scan of the conformal calibration queue with PyTorch/NumPy's \texttt{np.searchsorted}, reducing lookup complexity from $\mathcal{O}(M)$ to $\mathcal{O}(\log M)$.
+\item \textbf{Vectorized Empirical CDF}: We vectorize the SciPy degrees-of-freedom calculations in the residual CDF evaluations to run in parallel.
+\end{enumerate}
+
+These optimizations yield a \textbf{13$\times$ execution speedup} on the OpTC streaming loop, reducing processing time from 240 seconds to 18.03 seconds (averaging under 33.4 ms per window).
+
+\subsection{State Reasoning Operators \& Fusion}
+\begin{itemize}
+\item \textbf{Temporal State Reasoning}: The LSTM Autoencoder is implemented in PyTorch. It consists of an Encoder LSTM (12-dim state input, 32-dim hidden state) and a Decoder LSTM (32-dim hidden, 12-dim state output), trained for 60 epochs with Adam optimizer (learning rate $5\times 10^{-4}$) and batch size 64. 
+\item \textbf{Behavioral Pattern Reasoner (BPR)}: The BPR is implemented using Scikit-Learn's Random Forest classifier with 300 decision trees, a maximum depth of 10, and Gini impurity criterion. It is trained on the validation partition's 12-dimensional state coordinates.
+\item \textbf{Calibrated Fusion Meta-Learner}: The stacked fusion operator is a standard logistic regression model with L2 regularization ($C=1.0$) fitted on the validation set outputs of the reasoning operators.
+\end{itemize}
+
+Despite running three parallel models and a meta-fusion layer, the scoring latency remains exceptionally low. Once the SCM residuals are extracted, the average inference time for the hybrid ensemble is only \textbf{1.35--1.71 ms per window} across all benchmarks (Table~\ref{tab:runtime_hybrid}), confirming runtime viability.
+
+\begin{table}[htbp]
+\caption{Hybrid Ensemble Inference Latency per Streaming Window}
+\begin{center}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Dataset} & \textbf{Avg Inference Time (ms)} \\
+\hline
+TC3 & 1.705 ms \\
+NODLINK & 1.366 ms \\
+BETH & 1.351 ms \\
+OpTC & 1.354 ms \\
+StreamSpot & 1.703 ms \\
+\hline
+\end{tabular}
+\label{tab:runtime_hybrid}
+\end{center}
+\end{table}
+
+\subsection{Scalability and High-Dimensional Features}
+To assess causal discovery scalability, we measure one-time PCMCI execution times across different dimensions. Host telemetry features range from 23 (NODLINK) to 882 (BETH). While worst-case PCMCI complexity is exponential in graph density, the sparsity of host audit graphs (processes only interact with a limited set of files/sockets) bounds the parent set size. The effective MCI test complexity scales close to $\mathcal{O}(d^2 \tau_{\max} T)$, where $T$ is the number of baseline training windows. 
+
+On the BETH dataset ($d = 882$, $T = 360$), discovery completes in 7,842 seconds ($\approx$2.18 hours) on a standard CPU. While the subsequent streaming regression and hybrid scoring loop runs in milliseconds, this initial discovery phase suggests that feature selection pre-passes are essential for high-dimensional streams to mitigate startup latency.

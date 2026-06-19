@@ -1,0 +1,54 @@
+\section{Implementation \& Optimizations}
+
+ZeroCausal is implemented in Python utilizing NumPy, Pandas, SciPy, Tigramite, and Scikit-Learn. When initially evaluated, ZeroCausal's sliding-window loop was slow, requiring \textbf{240 seconds} to process 546 windows in OpTC, which is too slow for production deployments.
+
+We identified and resolved three key performance bottlenecks:
+\begin{enumerate}
+\item \textbf{NumPy Matrix Indexing}: Pandas \texttt{.iloc} lookups inside the evaluation loop introduced massive overhead. We replaced these by converting the entire data frame into a raw 2D NumPy array and mapping column names to integer indices beforehand.
+\item \textbf{Fast Binary Search Conformal Lookup}: Replaced the linear list-comprehension scan of calibration scores in \texttt{compute\_conformal\_pvalue} with \texttt{np.searchsorted}, reducing search complexity from $O(M)$ to $O(\log M)$.
+\item \textbf{Vectorized Empirical CDF}: Vectorized empirical CDF calculations for non-parametric residual scoring.
+\end{enumerate}
+
+These optimizations reduced the pure streaming loop execution latency to \textbf{18.88 seconds (a 13$\times$ speedup)}. Including one-time data loading, DataFrame alignment, and result logging, the total script execution time is approximately \textbf{28 seconds} on the OpTC dataset.
+
+\begin{table}[htbp]
+\caption{Runtime Breakdown per Streaming Window (OpTC)}
+\begin{center}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Component} & \textbf{Avg Time (ms)} \\
+\hline
+PCMCI Discovery & 18.5 \\
+SCM Fitting & 4.2 \\
+Anomaly Scoring (H-CAS) & 8.6 \\
+Conformal Calibration & 2.1 \\
+\hline
+\textbf{Total per window} & \textbf{33.4 ms} \\
+\hline
+\end{tabular}
+\label{tab:runtime}
+\end{center}
+\end{table}
+
+\subsection{Scalability and High-Dimensional Features}
+To assess the computational scalability of online causal discovery, we evaluate ZeroCausal's PCMCI discovery phase across different feature dimensions. In provenance-graph security monitoring, the number of unique edge types (features) $d$ can grow from dozens (e.g., $d=23$ for NODLINK) to hundreds (e.g., $d=130$ for OpTC and $d=882$ for BETH). 
+
+Mathematically, the worst-case complexity of PCMCI conditional independence testing is exponential in the maximum parent set size. However, because host execution graphs are highly sparse (processes only interact with a small subset of files and network sockets), the PC path search phase rapidly prunes the search space. The effective complexity of the subsequent MCI test is reduced to $\mathcal{O}(d^2 \tau_{\max} T)$, where $T$ is the number of baseline training windows. 
+
+On the BETH Linux host telemetry dataset ($d = 882$ features, $T = 360$ training windows), online PCMCI causal discovery completed in $7,842$\,s (approximately 2.18 hours) on a standard CPU. Although the online regression and conformal monitoring loop remains extremely lightweight (averaging $<10$\,ms per streaming step), this long initialization delay poses a major scalability barrier for high-dimensional enterprise streams. Consequently, employing a feature selection pre-pass is a mandatory prerequisite for practical deployments, as detailed in Section~\ref{sec:discussion}. We leave the integration of streaming feature selection to future work.
+
+\begin{table}[htbp]
+\centering
+\caption{One-time PCMCI Causal Discovery execution times across benchmark datasets.}
+\begin{tabular}{lccr}
+\toprule
+Dataset & Features ($d$) & Train Win. ($T$) & Time (s) \\
+\midrule
+NODLINK & 23 & 240 & 12.4 \\
+TC3 & 35 & 240 & 18.2 \\
+OpTC & 130 & 164 & 482.1 \\
+BETH & 882 & 360 & 7{,}842.0 \\
+\bottomrule
+\end{tabular}
+\label{tab:scalability}
+\end{table}

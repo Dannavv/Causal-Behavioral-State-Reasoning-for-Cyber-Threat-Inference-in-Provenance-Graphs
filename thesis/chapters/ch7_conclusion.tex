@@ -1,0 +1,151 @@
+% ============================================================================
+% Chapter 7: Discussion, Conclusion & Future Work
+% ============================================================================
+\chapter{Discussion, Conclusion, and Future Work}
+\label{ch:conclusion}
+
+\section{Discussion and Limitations}
+
+\subsection{Transition to Semi-Supervised Operation}
+
+CBSR's Behavioral Pattern Reasoner and meta-learner are calibrated using sparse validation labels,
+transitioning the framework from fully unsupervised to \textbf{semi-supervised}. This is a
+deliberate design trade-off: while a small validation overhead is introduced, the BPR learns an
+explicit decision boundary between benign noise and attack patterns, insulating the system from the
+calibration poisoning vulnerability that afflicted the pure causal baseline (v1), and providing far
+higher classification performance. The state representation itself (causal discovery, SCM fitting,
+and state projection) remains fully unsupervised and requires no labels.
+
+\subsection{Calibration Sensitivity Under Contamination}
+
+Under the pure causal baseline (v1), attack events leaking into the conformal calibration queue
+inflated the empirical-CDF baseline, masking subsequent test attacks and causing AUC to drop from
+0.972 to 0.681 under just 1\% training contamination. CBSR significantly mitigates this through
+RobustParCorr (MCD-based, tolerating 15\% contamination in causal discovery) and the BPR's
+explicit label-supervised training. However, very high contamination rates ($>$20\%) remain an
+open challenge.
+
+\subsection{Scalability Limitations on High-Dimensional Logs}
+
+PCMCI causal discovery on BETH ($d = 882$ features, $T = 360$ training windows) requires
+7,842 seconds ($\approx$2.18 hours) on a standard CPU. This is a one-time offline or
+asynchronous background process. For environments with thousands of unique edge types ($d > 1000$),
+a mandatory feature selection pre-pass (variance thresholding or mutual-information ranking) is
+required before PCMCI. GPU-accelerated robust covariance estimation and distributed PCMCI
+are targeted as engineering extensions.
+
+\subsection{Causal Sufficiency Assumption}
+
+CBSR assumes causal sufficiency---no unobserved confounders jointly drive the observed provenance
+features. In enterprise networks, unobserved external variables (e.g., domain controller
+group-policy pushes, NTP synchronization) could induce spurious causal edges, resulting in
+localized false alarms. Two mechanisms mitigate this: (1) the conformal prediction layer absorbs
+Type I error inflation from spurious edges, and (2) the change-point detector triggers periodic
+online refits that discard stale or spurious edges. The practical consequence is elevated (but
+bounded) false alarms, not missed attacks---a favorable failure mode for a defense system.
+
+\subsection{StreamSpot and Heterogeneous Provenance}
+
+StreamSpot (AUC 0.6909) highlights a clear boundary condition: a single linear SCM learned from
+a mixture of heterogeneous workload types is a poor fit for any individual type. The temporal
+reasoner ($R_T$) rescues much of the performance by capturing sequential attack signatures, but
+the mechanism violation coordinates remain desensitized. Workload-conditioned SCMs or
+mixture-of-experts architectures are needed for production deployment on heterogeneous graph
+databases.
+
+\subsection{Mimicry Attacks}
+
+Successful SCM-aware mimicry requires an attacker to simultaneously satisfy all $d \times
+\tau_{\max}$ causal constraints while executing a multi-stage attack---a highly constrained
+optimization problem. Moreover, real APT campaigns inject novel process--file edges with no
+causal parents in the baseline graph, triggering the structural novelty coordinate ($s_1$)
+regardless of residual behavior. Empirical evaluation of active mimicry adversaries is left to
+future work.
+
+
+\section{Answering the Research Questions}
+
+\textbf{RQ1: Online causal discovery from unlabeled data.}
+CBSR demonstrates that RobustParCorr-based PCMCI can discover stable causal mechanisms from
+streaming, unlabeled, and potentially contaminated provenance data. The MCD estimator tolerates
+up to 15\% contamination in causal structure learning, confirmed by the contamination sweep in
+Section~\ref{sec:contamination}.
+
+\textbf{RQ2: Rich behavioral state representation for multi-perspective reasoning.}
+The 12-dimensional Behavioral State Space successfully captures diverse APT manifestations across
+five coordinate groups. Feature importance analysis confirms that Mechanism Violation coordinates
+($s_9$: Log Min $p$-value, $s_{10}$: Residual Energy) are the primary detection drivers, while
+the Causal Intervention Score ($s_{12}$) provides the strongest topological signal on complex
+enterprise APTs (OpTC importance = 0.332).
+
+\textbf{RQ3: Online threshold calibration under drift.}
+The conformal prediction feedback loop maintains empirical false alarm rates at 1.78\%--6.13\%
+across all datasets at a 5\% FPR budget. The change-point-triggered SCM refit and queue flush
+hold post-drift false alarm rates to 9.2\%---3.2$\times$--5.6$\times$ lower than static
+alternatives.
+
+
+\section{Summary of Contributions}
+
+This thesis presented \textbf{Causal Behavioral State Reasoning (CBSR)}, a novel
+provenance-based IDS that eliminates the clean-data and label assumptions that constrain all
+prior work in this domain. The key contributions are:
+
+\begin{enumerate}
+\item \textbf{Formal Behavioral State Space}: A 12-dimensional state representation grounded in
+    five invariant coordinate groups derived from online SCM outputs, providing a principled
+    basis for multi-perspective threat reasoning on streaming provenance telemetry.
+
+\item \textbf{Causal Intervention Score (CIS)}: A graph-boundary metric grounded in spectral
+    graph theory that quantifies multi-hop violation propagation, separating localized
+    administrative noise from cascading APT lateral movement.
+
+\item \textbf{Multi-Perspective Parallel Reasoning}: A three-operator architecture ($R_L$,
+    $R_T$, $R_B$) that resolves the model-mismatch failures of pure causal detectors by
+    combining instantaneous, temporal, and behavioral perspectives on the shared state space.
+
+\item \textbf{Calibrated Risk Inference with Conformal Guarantees}: A stacked meta-fusion layer
+    with online conformal prediction providing distribution-free FPR bounds under concept drift,
+    with change-point-triggered queue flushing to restore localized exchangeability.
+
+\item \textbf{Multi-Benchmark Validation}: AUC of 0.9628 on DARPA OpTC (real enterprise Windows
+    logs), AUC 0.9901 on BETH (Linux sysdig telemetry), AUC 0.9837 / 0.9784 on TC3 / NODLINK
+    (simulated APT campaigns), and AUC 0.6909 on StreamSpot---a $+$19.2\% improvement over the
+    pure causal baseline on this challenging heterogeneous benchmark.
+\end{enumerate}
+
+
+\section{Future Work}
+
+We identify four key areas for future exploration:
+
+\begin{enumerate}
+\item \textbf{Workload-Conditioned SCM Ensembles}: The StreamSpot weakness stems from fitting a
+    single linear SCM over heterogeneous graph workloads. Future work will explore workload-type
+    conditioning via graph clustering pre-passes or mixture-of-experts SCMs with soft workload
+    assignment, targeting substantially higher detection on heterogeneous-database environments.
+
+\item \textbf{Scalable Causal Discovery for High-Dimensional Logs}: For $d > 500$ edge types,
+    PCMCI discovery time becomes a practical bottleneck. Future work will integrate
+    GPU-accelerated FastMCD robust covariance estimation and distributed PCMCI to reduce offline
+    startup time to under 6 hours for $d = 5000$ features.
+
+\item \textbf{Robust Conformal Calibration under Heavy Contamination}: Developing trimmed eCDF
+    estimation or self-supervised anomaly filtering to screen the rolling conformal calibration
+    queue, improving resilience when training streams carry $>$20\% contamination.
+
+\item \textbf{Empirical SCM-Aware Mimicry Attack Evaluation}: Designing and empirically
+    evaluating adversarial scenarios where an attacker actively learns and mimics the discovered
+    SCM structure, and evaluating whether the structural novelty coordinate and CIS can maintain
+    robustness against this sophisticated threat.
+\end{enumerate}
+
+
+\section{Closing Remarks}
+
+CBSR presents a paradigm shift in provenance-based IDS design. By projecting raw system telemetry
+into a formal causal behavioral state space and analyzing it from multiple reasoning perspectives,
+it opens a practical pathway for enterprise deployments where clean training data is unavailable.
+The formal state representation, CIS metric, and multi-perspective reasoning architecture together
+provide a strong foundation for future research at the intersection of causal inference and
+cybersecurity.

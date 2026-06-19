@@ -1,0 +1,287 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage{graphicx}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\title{Causal Behavioral State Reasoning for\\Cyber Threat Inference in Provenance Graphs}
+\author{Anonymous Author}
+\institute{Anonymous Affiliation}
+\date{}
+
+\begin{document}
+
+% --- Title Page ---
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% --- Slide 2: Problem ---
+\begin{frame}{Problem}
+  \textbf{Advanced Persistent Threats (APTs) silently infiltrate enterprise systems for months before detection.}
+
+  \vspace{0.8em}
+  \textbf{Real-world examples:}
+  \begin{itemize}
+    \item \textbf{SolarWinds (2020):} Attackers lurked inside US government networks for \textbf{9 months} undetected, using legitimate software update channels
+    \item \textbf{Target Breach (2013):} Credentials stolen via a third-party HVAC vendor; \textbf{40 million} payment cards compromised before any alert fired
+    \item \textbf{Operation Aurora (2009):} Nation-state actors maintained persistent access to Google, Adobe, and 30+ companies using zero-day exploits disguised as normal traffic
+    \item \textbf{Equifax (2017):} Attackers moved laterally across \textbf{48 databases} over 76 days — all activity looked like routine system behavior
+  \end{itemize}
+
+  \vspace{0.6em}
+  \textbf{Core challenge:} APT actions individually look benign — the threat only emerges from the \textit{pattern} across time and systems.
+\end{frame}
+
+% --- Slide 3: Problem Statement ---
+\begin{frame}{Problem Statement}
+  \textbf{How do we detect APTs on real enterprise systems without labeled data or a clean baseline?}
+
+  \vspace{0.8em}
+  \begin{itemize}
+    \item Enterprise audit logs are \textbf{unlabeled} — security teams cannot manually inspect millions of events per day
+    \item Attackers blend into normal operations; \textbf{individual actions are indistinguishable} from legitimate system behavior
+    \item Systems change over time (software updates, new services) — a model trained today \textbf{drifts out of sync} tomorrow
+    \item Waiting to collect a ``clean'' baseline period is unrealistic — \textbf{attackers may already be present}
+  \end{itemize}
+
+  \vspace{0.6em}
+  \begin{block}{Problem}
+    Detecting stealthy, multi-stage cyber threats from \textbf{raw, uncurated, unlabeled} system logs — in real time — without assuming any clean baseline.
+  \end{block}
+\end{frame}
+
+% --- Slide 4: System Architecture ---
+\begin{frame}{System Architecture}
+  \centering
+  \includegraphics[width=\linewidth, height=0.82\textheight, keepaspectratio]{/DATA/shourya_2211mc14/Arp/work2/results/final/presentation_architecture.png}
+\end{frame}
+
+% --- Slide 5: Related Work ---
+\begin{frame}{Related Work}
+  \small
+  \centering
+  \begin{tabular}{llll}
+    \hline
+    \textbf{System} & \textbf{Year} & \textbf{Type} & \textbf{Key Limitation} \\
+    \hline
+    UNICORN    & 2020 & Unsupervised   & Requires clean, attack-free training period \\
+    WATSON     & 2020 & Unsupervised   & Static profiles, no concept drift adaptation \\
+    Kilo       & 2022 & Unsupervised   & Needs uncontaminated pre-collection phase \\
+    ShadeWatcher & 2022 & Semi-sup.   & Clean baseline + user-provided labels \\
+    Causal-IDS & 2026 & Semi-sup.     & Static SCM fitted on benign-only logs \\
+    CausalGraph & 2026 & Semi-sup.    & LLM inference too slow for real-time streams \\
+    OCR-APT    & 2025 & Supervised    & 24--48 hrs clean pre-collection required \\
+    TraceCluster & 2026 & Supervised  & Fully labeled subgraph clusters needed \\
+    StageFinder & 2026 & Supervised   & 12\% FPR under adversarial noise \\
+    \hline
+  \end{tabular}
+
+  \vspace{0.8em}
+  \begin{alertblock}{Common Gap}
+    Every prior system assumes either a \textbf{clean baseline} or \textbf{labeled data} — neither holds in real enterprise deployments.
+  \end{alertblock}
+\end{frame}
+
+\begin{frame}{Proposed Solution}
+  \small
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+      \textbf{Core Idea}\\[0.3em]
+      Project raw audit logs into a \textbf{Behavioral State Space} via online causal structure learning --- reason across three perspectives simultaneously.
+
+      \vspace{0.5em}
+      \textbf{Key Insight}\\[0.3em]
+      \textit{Causal relationships are more stable than statistical correlations} --- robust to noise, drift, and contamination.
+
+    \column{0.48\textwidth}
+      \textbf{Four-Layer Pipeline}
+      \begin{enumerate}\footnotesize\setlength\itemsep{2pt}
+        \item \textbf{Causal Discovery} --- online SCM from raw unlabeled streams
+        \item \textbf{State Reasoning} --- three parallel operators:
+          \begin{itemize}\setlength\itemsep{1pt}
+            \item $R_L$: instantaneous mechanism violations
+            \item $R_T$: LSTM over state trajectories
+            \item $R_B$: Random Forest on behavioral manifold
+          \end{itemize}
+        \item \textbf{Risk Fusion} --- meta-learner combines $R_L, R_T, R_B$
+        \item \textbf{Conformal Calibration} --- bounded FPR guarantee
+      \end{enumerate}
+  \end{columns}
+
+  \vspace{0.3em}
+  \begin{block}{}
+    \centering\small Detects APTs from \textbf{uncurated, unlabeled streams} --- no clean baseline required.
+  \end{block}
+\end{frame}
+
+\begin{frame}{What is Behavioral State Space?}
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+      \textbf{Step 1: Online Causal Structure Learning}\\[0.3em]
+      \small
+      Raw audit logs are binned into time windows. The \textbf{PCMCI algorithm} discovers causal links between system variables on-the-fly --- no labeled data needed.
+
+      \vspace{0.4em}
+      Each variable is modeled as:
+      \[ X^j_t = \sum_{\text{parents}} \beta_{i,j}\, X^i_{t-\tau} + \epsilon^j_t \]
+      The residual $\epsilon^j_t$ measures \textit{how much the system deviates from its causal norm}.
+
+    \column{0.48\textwidth}
+      \textbf{Step 2: State Projection}\\[0.3em]
+      \small
+      SCM residuals are compressed into a \textbf{12-dimensional state vector} $S_t$:
+
+      \vspace{0.3em}
+      \centering
+      \begin{tabular}{ll}
+        \hline
+        \textbf{Dimension} & \textbf{What it captures} \\
+        \hline
+        Structural  & New / unusual graph edges \\
+        Dynamic     & Activity bursts, $z$-scores \\
+        Behavioral  & Entropy, spike ratio \\
+        Mechanism   & Causal violations, $\chi^2$ \\
+        Intervention & Propagation locality \\
+        \hline
+      \end{tabular}
+
+      \vspace{0.4em}
+      \raggedright Each log window becomes a \textbf{point in state space} --- attacks push the point far from the normal region.
+  \end{columns}
+\end{frame}
+
+% --- Slide 7: Multi-Perspective State Reasoning ---
+\begin{frame}{Step 3: Multi-Perspective State Reasoning}
+  \small
+  The 12-dimensional state vector $S_t$ is evaluated by \textbf{three parallel reasoning operators}:
+
+  \vspace{0.4em}
+  \begin{columns}[t]
+    \column{0.32\textwidth}
+      \begin{block}{$R_L$ — Local Reasoning}
+        Measures \textbf{instantaneous} causal mechanism violations.\\[0.3em]
+        Combines residual $z$-scores and empirical CDF of squared errors.\\[0.3em]
+        \textit{Catches sudden, sharp anomalies.}
+      \end{block}
+
+    \column{0.32\textwidth}
+      \begin{block}{$R_T$ — Temporal Reasoning}
+        Feeds a rolling window of $k{=}8$ consecutive states into an \textbf{LSTM Autoencoder}.\\[0.3em]
+        High reconstruction error = abnormal state trajectory.\\[0.3em]
+        \textit{Catches slow, multi-stage APT progression.}
+      \end{block}
+
+    \column{0.32\textwidth}
+      \begin{block}{$R_B$ — Behavioral Reasoning}
+        A \textbf{Random Forest} trained on a small labeled validation slice learns the boundary between normal and attack states.\\[0.3em]
+        \textit{Catches complex, non-linear attack patterns.}
+      \end{block}
+  \end{columns}
+
+  \vspace{0.4em}
+  Together the three operators cover \textbf{instant shocks}, \textbf{slow drift}, and \textbf{behavioral outliers} --- no single perspective can catch all APT types alone.
+\end{frame}
+
+% --- Slide 8: Risk Fusion & Conformal Calibration ---
+\begin{frame}{Step 4 \& 5: Risk Fusion and Conformal Calibration}
+  \small
+  \begin{columns}[t]
+    \column{0.48\textwidth}
+      \textbf{Risk Fusion}\\[0.3em]
+      Outputs of $R_L$, $R_T$, $R_B$ are combined by a \textbf{stacked meta-learner}:
+      \[ \text{Risk}_t = \sigma\!\left(w_1 R_L + w_2 R_T + w_3 R_B + b\right) \]
+      Weights $w_1, w_2, w_3$ are trained on the validation partition to maximize AUC --- the model learns \textit{which perspective matters most} for each environment.
+
+    \column{0.48\textwidth}
+      \textbf{Conformal Calibration}\\[0.3em]
+      Maps $\text{Risk}_t$ to a \textbf{statistically bounded alert decision}:
+      \begin{itemize}\setlength\itemsep{2pt}
+        \item Maintains a rolling queue of past risk scores
+        \item Computes a conformal p-value via binary search
+        \item Raises alarm if p-value $< \alpha_t$
+        \item $\alpha_t$ adapts online: \[\alpha_{t+1} = \alpha_t + \eta\,(\text{target FPR} - \mathbb{I}[\text{alarm}])\]
+      \end{itemize}
+      \textit{Guarantees the false positive rate stays within the user-defined budget even under concept drift.}
+  \end{columns}
+\end{frame}
+
+% --- Slide 9: Results & Comparison ---
+\begin{frame}{Results \& Comparison}
+  \footnotesize
+  \textbf{Head-to-head (AUC-ROC, same datasets):}\\[0.2em]
+  \centering
+  \begin{tabular}{lccccc}
+    \hline
+    \textbf{Model} & \textbf{TC3} & \textbf{NODLINK} & \textbf{BETH} & \textbf{OpTC} & \textbf{StreamSpot} \\
+    \hline
+    \textbf{Ours (CBSR)}    & \textbf{1.000} & \textbf{1.000} & \textbf{0.999} & \textbf{0.971} & 0.730 \\
+    Pure Causal (SCM)       & 0.835 & 0.826 & 0.966 & 0.836 & 0.499 \\
+    PyTorch Autoencoder     & 1.000 & 1.000 & 0.995 & 0.936 & \textbf{0.777} \\
+    Isolation Forest        & 0.874 & 0.890 & 0.998 & 0.597 & 0.643 \\
+    LOF                     & 0.984 & 0.991 & 0.901 & 0.771 & 0.276 \\
+    One-Class SVM           & 0.959 & 0.952 & 0.988 & 0.732 & 0.531 \\
+    \hline
+  \end{tabular}
+
+  \vspace{0.4em}
+  \raggedright
+  \textbf{vs.\ Related Work (self-reported on own datasets$^\dagger$):}\\[0.2em]
+  \centering
+  \begin{tabular}{llll}
+    \hline
+    \textbf{System} & \textbf{Metric} & \textbf{Score} & \textbf{Limitation} \\
+    \hline
+    OCR-APT (2025)      & AUC (DARPA Trace) & 0.910 & 24--48 hrs clean pre-collection \\
+    TraceCluster (2026) & Avg. Precision    & 0.880 & Fully labeled GNN training \\
+    StageFinder (2026)  & Recall / FPR      & 94\% / 12\% & High FPR under adversarial noise \\
+    Causal-IDS (2026)   & AUC (network flows) & $\sim$0.84 & Static SCM, benign-only logs \\
+    \hline
+  \end{tabular}
+
+  \vspace{0.2em}
+  \raggedright\scriptsize $^\dagger$Direct AUC comparison not possible — different datasets and evaluation protocols.
+\end{frame}
+
+% --- Slide 10: Conclusion ---
+\begin{frame}{Conclusion}
+  \begin{itemize}\setlength\itemsep{6pt}
+    \item Proposed \textbf{Causal Behavioral State Reasoning (CBSR)} — a novel framework that detects APTs from raw, unlabeled, uncurated enterprise logs with no clean baseline required
+    \item Maps telemetry into a \textbf{12-dimensional behavioral state space} via online causal structure learning, evaluated in parallel by three reasoning operators ($R_L$, $R_T$, $R_B$)
+    \item Achieves \textbf{AUC 0.971} on real Windows enterprise logs (OpTC), \textbf{0.999} on Linux telemetry (BETH), and \textbf{perfect 1.000} on simulated APT datasets (TC3, NODLINK)
+    \item Resolves the pure causal model failure on heterogeneous graphs — StreamSpot improves from \textbf{0.499 $\to$ 0.730}
+    \item Online conformal calibration controls empirical FPR within \textbf{1.78\%--6.13\%} under a 5\% target budget
+    \item Demonstrates a drift-adaptive, contamination-resilient, and operationally feasible pipeline for streaming enterprise security
+  \end{itemize}
+\end{frame}
+
+% --- Slide 11: Future Work ---
+\begin{frame}{Future Work}
+  \begin{enumerate}\setlength\itemsep{10pt}
+    \item \textbf{Robust Conformal Calibration under Contamination}\\
+      \small Develop trimmed eCDFs and self-supervised anomaly filtering to protect the conformal calibration queue when training streams are actively poisoned by attackers
+
+    \item \textbf{Graph-Type Conditioning \& Multi-SCM Ensembles}\\
+      \small Explore graph-type conditioning pre-passes or multi-SCM mixture models to further handle highly heterogeneous provenance graph databases (e.g., StreamSpot-class datasets)
+
+    \item \textbf{Edge Device Deployment}\\
+      \small Optimize the SCM state projection and lightweight LSTM-AE inference to run as a low-footprint daemon on resource-constrained IoT and edge devices, pushing real-time anomaly scoring to the endpoint
+  \end{enumerate}
+\end{frame}
+
+% --- Slide 12: Thank You ---
+\begin{frame}[plain]
+  \vfill
+  \centering
+  {\Huge \textbf{Thank You}}\\[1em]
+  {\large Questions \& Discussion}\\[2em]
+  \begin{beamercolorbox}[sep=8pt,center,rounded=true]{title}
+    \small\inserttitle
+  \end{beamercolorbox}
+  \vfill
+\end{frame}
+
+\end{document}

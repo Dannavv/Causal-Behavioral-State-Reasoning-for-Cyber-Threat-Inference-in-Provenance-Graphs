@@ -1,0 +1,9 @@
+\section{Future Work}
+\label{sec:future}
+We identify four key areas for future exploration:
+\begin{enumerate}
+\item \textbf{Workload-Conditioned SCM Ensembles for Heterogeneous Graphs}: The residual weakness on StreamSpot (AUC 0.6909) stems from fitting a single linear SCM over a mixture of five heterogeneous graph workloads. Future work will explore workload-type conditioning via graph clustering pre-passes to assign each streaming window to a workload-specific SCM, or a mixture-of-experts architecture with soft workload assignment. Either approach should substantially improve detection on heterogeneous-database environments.
+\item \textbf{Scalable Causal Discovery for High-Dimensional Logs}: At $d > 500$ edge types, PCMCI discovery time becomes a practical bottleneck (7,842 seconds on BETH at $d = 882$). Future work will integrate GPU-accelerated robust covariance estimation (FastMCD or online sketching) and distributed PCMCI to reduce offline startup time to under 6 hours for $d = 5000$ features.
+\item \textbf{Robust Conformal Calibration under Contamination}: Developing trimmed eCDF estimation or self-supervised anomaly filtering to screen the rolling conformal calibration queue, improving resilience when training streams carry $>$20\% contamination.
+\item \textbf{Empirical SCM-Aware Mimicry Attack Evaluation}: Designing and empirically evaluating adversarial scenarios where an attacker actively learns and mimics the discovered SCM structure, including evaluation of whether the structural novelty override ($s_{t,1}$) and CIS can maintain robustness.
+\end{enumerate}

@@ -1,0 +1,10 @@
+\section{Threat Model}
+\label{sec:threat}
+We assume a sophisticated attacker capable of executing arbitrary commands, downloading malicious payloads, and altering file systems without generating signature-based alerts. We assume the attacker cannot break the fundamental causal invariances of the system without leaving traces in the provenance graph. However, we assume the adversary is aware of our monitoring presence and may actively deploy adaptive evasion strategies:
+
+\begin{enumerate}
+\item \textbf{Calibration Poisoning}: A poisoner injects high-volume, anomalous but non-malicious-looking traffic during the baseline training or calibration phase. This inflates the conformal calibration queue's scores, widening the threshold bounds and allowing subsequent stealthy attack steps to bypass detection.
+\item \textbf{Refit Blind Spots}: Since the system reset-flushes its conformal queue and refits SCM parameters upon detecting a concept drift (change-point), there is a temporary adaptation period. An adaptive adversary can intentionally trigger benign-looking drift (e.g., executing software updates) and immediately execute malicious actions during this adaptation window when the SCM baseline is settling.
+\item \textbf{SCM-Aware Mimicry}: An attacker who learns the system SCM's structure can orchestrate execution timings and event rates to exactly mimic normal system execution dependencies and satisfy all $d \times \tau_{\max}$ causal constraints, bypassing residual-based alerts.
+\end{enumerate}
+Our framework focuses on defending against standard stealthy APTs where such precise, multi-constraint causal mimicry or poisoning is highly constrained. We discuss these limitations and potential mitigations in Section~\ref{sec:discussion}.
